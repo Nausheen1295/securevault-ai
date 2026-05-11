@@ -26,11 +26,11 @@
 
 | Login Page | Dashboard |
 |:---:|:---:|
-| ![Login](https://via.placeholder.com/400x250/050810/00e5ff?text=Login+Page) | ![Dashboard](https://via.placeholder.com/400x250/050810/7c3aed?text=Dashboard) |
+| ![Login](./screenshots/login.png) | ![Dashboard](./screenshots/dashboard.png) |
 
 | AI Scanner | Blockchain Vault |
 |:---:|:---:|
-| ![AI](https://via.placeholder.com/400x250/050810/00ff88?text=AI+Scanner) | ![Blockchain](https://via.placeholder.com/400x250/050810/ff3b6b?text=Blockchain+Vault) |
+| ![AI](./screenshots/aithreatscanner.png) | ![Blockchain](./screenshots/blockchainkeyvault.png) |
 
 </div>
 
