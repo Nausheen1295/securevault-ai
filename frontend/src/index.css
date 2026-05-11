@@ -156,7 +156,24 @@ h1, h2, h3, h4 { font-family: 'Syne', sans-serif; }
   transition: border-color 0.2s, box-shadow 0.2s;
   outline: none;
 }
-.input:focus { border-color: var(--accent-cyan); box-shadow: 0 0 0 3px rgba(0,229,255,0.1); }
+.input:focus {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 3px rgba(0,229,255,0.15), 0 0 24px rgba(0,229,255,0.22);
+  color: #ffffff;
+  text-shadow: 0 0 8px rgba(0,229,255,0.5);
+}
+/* Password fields get a stronger violet glow when focused */
+.input[type="password"]:focus {
+  border-color: var(--accent-violet);
+  box-shadow: 0 0 0 3px rgba(124,58,237,0.2), 0 0 28px rgba(124,58,237,0.4);
+  text-shadow: 0 0 12px rgba(167,139,250,0.9), 0 0 4px rgba(255,255,255,0.4);
+  caret-color: var(--accent-violet);
+  animation: input-pulse 2.4s ease-in-out infinite;
+}
+@keyframes input-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(124,58,237,0.2), 0 0 22px rgba(124,58,237,0.35); }
+  50%      { box-shadow: 0 0 0 3px rgba(124,58,237,0.28), 0 0 38px rgba(124,58,237,0.55); }
+}
 .input::placeholder { color: var(--text-muted); }
 
 /* Progress bar */

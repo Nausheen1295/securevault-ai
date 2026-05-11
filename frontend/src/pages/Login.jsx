@@ -1,26 +1,57 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { loginUser, registerUser } from "../utils/firebase";
+import { checkPwnedPassword } from "../utils/hibp";
+import { generatePassword } from "../utils/crypto";
 
-const DEMO_USER = { name: "Karthikeyan", email: "user@securevault.ai" };
+const DEMO_USER = { name: "Nausheen", email: "user@securevault.ai" };
 
 export default function Login({ onLogin }) {
   const [mode, setMode]         = useState("password"); // password | biometric | creating
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName]         = useState("");
+  const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
   const [bioStep, setBioStep]   = useState("idle"); // idle | scanning | success | failed
+  const [pwned, setPwned]       = useState(null);  // { count, checking }
   const videoRef                = useRef(null);
+
+  // Debounced breach check (only meaningful when registering)
+  useEffect(() => {
+    if (!isRegistering || password.length < 4) { setPwned(null); return; }
+    setPwned({ checking: true });
+    const t = setTimeout(async () => {
+      try {
+        const r = await checkPwnedPassword(password);
+        setPwned({ count: r.count, checking: false });
+      } catch { setPwned(null); }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [password, isRegistering]);
 
   /* ── Password Login ── */
   const handlePasswordLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-    await new Promise(r => setTimeout(r, 900));
-    if (email && password.length >= 6) {
-      onLogin(DEMO_USER);
-    } else {
-      setError("Invalid credentials. Try any email + 6+ char password.");
+    try {
+      let firebaseUser;
+      if (isRegistering) {
+        firebaseUser = await registerUser(email, password, name);
+      } else {
+        firebaseUser = await loginUser(email, password);
+      }
+      onLogin({
+        name:  name || email.split("@")[0],
+        email: firebaseUser.email,
+        uid:   firebaseUser.uid,
+      });
+    } catch (err) {
+      if (err.code === "auth/user-not-found")   setError("No account found. Register first!");
+      else if (err.code === "auth/wrong-password") setError("Wrong password. Try again.");
+      else if (err.code === "auth/email-already-in-use") setError("Email already registered. Login instead.");
+      else setError(err.message);
     }
     setLoading(false);
   };
@@ -120,21 +151,53 @@ export default function Login({ onLogin }) {
         {/* ── Password Form ── */}
         {mode === "password" && (
           <form onSubmit={handlePasswordLogin} style={styles.form}>
+            {isRegistering && (
+              <div style={styles.field}>
+                <label style={styles.label}>NAME</label>
+                <input className="input" type="text" placeholder="Your name"
+                  value={name} onChange={e => setName(e.target.value)} required />
+              </div>
+            )}
             <div style={styles.field}>
               <label style={styles.label}>EMAIL</label>
               <input className="input" type="email" placeholder="you@example.com"
                 value={email} onChange={e => setEmail(e.target.value)} required />
             </div>
             <div style={styles.field}>
-              <label style={styles.label}>MASTER PASSWORD</label>
+              <label style={styles.label}>
+                MASTER PASSWORD
+                {isRegistering && (
+                  <button type="button" title="Generate strong password"
+                    onClick={() => setPassword(generatePassword(20))}
+                    style={styles.diceBtn}>🎲 Generate</button>
+                )}
+              </label>
               <input className="input" type="password" placeholder="••••••••••"
                 value={password} onChange={e => setPassword(e.target.value)} required />
+              {isRegistering && pwned && (
+                <div style={styles.pwnedRow}>
+                  {pwned.checking
+                    ? <span style={{ color: "var(--text-muted)" }}>🔍 Checking breach database...</span>
+                    : pwned.count > 0
+                      ? <span style={{ color: "var(--accent-red)" }}>
+                          ⚠️ Found in {pwned.count.toLocaleString()} known data breaches — pick a different one
+                        </span>
+                      : <span style={{ color: "var(--accent-green)" }}>
+                          ✅ Not seen in any known breach
+                        </span>
+                  }
+                </div>
+              )}
             </div>
             {error && <div style={styles.error}>{error}</div>}
             <button className="btn btn-primary" type="submit" disabled={loading}
               style={{ width: "100%", justifyContent: "center", marginTop: 8 }}>
               {loading ? <span style={styles.spinner} /> : null}
-              {loading ? "Authenticating..." : "Sign In →"}
+              {loading ? "Authenticating..." : isRegistering ? "Create Account →" : "Sign In →"}
+            </button>
+            <button type="button" onClick={() => { setIsRegistering(r => !r); setError(""); }}
+              style={styles.toggleBtn}>
+              {isRegistering ? "Already have an account? Sign in" : "New here? Create an account"}
             </button>
           </form>
         )}
@@ -275,4 +338,17 @@ const styles = {
     textAlign: "center", fontSize: 10, color: "var(--text-muted)",
     marginTop: 24, letterSpacing: "0.05em",
   },
+  toggleBtn: {
+    background: "transparent", border: "none", color: "var(--accent-cyan)",
+    fontSize: 12, cursor: "pointer", marginTop: 4, padding: 4,
+    fontFamily: "DM Mono, monospace",
+  },
+  diceBtn: {
+    float: "right", background: "transparent",
+    border: "1px solid rgba(0,229,255,0.25)", borderRadius: 6,
+    color: "var(--accent-cyan)", fontSize: 10, padding: "2px 8px",
+    cursor: "pointer", fontFamily: "DM Mono, monospace",
+    letterSpacing: "0.05em",
+  },
+  pwnedRow: { fontSize: 11, marginTop: 4 },
 };

@@ -1,19 +1,5 @@
 import { useState, useCallback } from "react";
-
-// Simulated AI threat signatures — in production use TensorFlow.js NSFW/malware model
-const THREAT_SIGNATURES = {
-  extensions: {
-    ".exe": { risk: "HIGH",   type: "Executable",        detail: "Windows executable — potential malware vector" },
-    ".bat": { risk: "HIGH",   type: "Batch Script",      detail: "Command execution script — high risk" },
-    ".ps1": { risk: "HIGH",   type: "PowerShell Script", detail: "PowerShell can execute arbitrary system commands" },
-    ".vbs": { risk: "HIGH",   type: "VBScript",          detail: "Legacy scripting — commonly used in attacks" },
-    ".js":  { risk: "MEDIUM", type: "JavaScript",        detail: "Could contain obfuscated malicious code" },
-    ".jar": { risk: "MEDIUM", type: "Java Archive",      detail: "Java execution context — review before use" },
-    ".zip": { risk: "LOW",    type: "Archive",           detail: "Contains nested files — content unverifiable" },
-    ".pdf": { risk: "LOW",    type: "PDF Document",      detail: "PDFs can embed scripts — low but present risk" },
-  },
-  sizeThresholds: { suspicious: 50 * 1024 * 1024 }, // 50MB
-};
+import { fullScan } from "../utils/aiScanner";
 
 const RISK_CONFIG = {
   HIGH:   { color: "var(--accent-red)",   bg: "rgba(255,59,107,0.08)",   badge: "badge-red",   icon: "🚨" },
@@ -21,30 +7,6 @@ const RISK_CONFIG = {
   LOW:    { color: "var(--accent-cyan)",  bg: "rgba(0,229,255,0.06)",    badge: "badge-cyan",  icon: "ℹ️" },
   CLEAN:  { color: "var(--accent-green)", bg: "rgba(0,255,136,0.06)",    badge: "badge-green", icon: "✅" },
 };
-
-async function simulateAIScan(file) {
-  // Simulate AI processing time
-  await new Promise(r => setTimeout(r, 600 + Math.random() * 800));
-
-  const ext  = "." + file.name.split(".").pop().toLowerCase();
-  const sig  = THREAT_SIGNATURES.extensions[ext];
-  const large = file.size > THREAT_SIGNATURES.sizeThresholds.suspicious;
-
-  // Entropy analysis simulation (real impl would read file bytes)
-  const entropy = +(5.2 + Math.random() * 2.5).toFixed(2);
-  const highEntropy = entropy > 7.2; // Encrypted/compressed files have high entropy
-
-  if (sig?.risk === "HIGH") {
-    return { risk: "HIGH", type: sig.type, detail: sig.detail, entropy, confidence: 94 };
-  }
-  if (sig?.risk === "MEDIUM" || large) {
-    return { risk: "MEDIUM", type: sig?.type ?? "Large File", detail: sig?.detail ?? "File exceeds size threshold — manual review recommended", entropy, confidence: 78 };
-  }
-  if (sig?.risk === "LOW" || highEntropy) {
-    return { risk: "LOW", type: sig?.type ?? "High Entropy", detail: highEntropy ? "High entropy detected — possibly pre-encrypted or compressed" : sig?.detail, entropy, confidence: 65 };
-  }
-  return { risk: "CLEAN", type: "Safe", detail: "No threats detected by AI analysis", entropy, confidence: 97 };
-}
 
 export default function AIThreatScanner() {
   const [files, setFiles]     = useState([]);
@@ -68,8 +30,8 @@ export default function AIThreatScanner() {
       const f = files[i];
       setCurrentFile(f.name);
       setProgress(Math.round(((i) / files.length) * 100));
-      const result = await simulateAIScan(f);
-      out.push({ file: f, ...result });
+      const result = await fullScan(f);
+      out.push(result);
       setResults([...out]);
     }
     setProgress(100);
@@ -187,7 +149,16 @@ export default function AIThreatScanner() {
                       <p style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>{r.detail}</p>
                       <div style={styles.resultMeta}>
                         <span>Entropy: <b style={{ color: r.entropy > 7 ? "var(--accent-amber)" : "var(--text-primary)" }}>{r.entropy}</b></span>
-                        <span>AI Confidence: <b style={{ color: cfg.color }}>{r.confidence}%</b></span>
+                        <span>Confidence: <b style={{ color: cfg.color }}>{r.confidence}%</b></span>
+                        {typeof r.vtMalicious === "number" && (
+                          <span>VT engines: <b>{r.vtMalicious}/{r.vtTotal}</b></span>
+                        )}
+                        {r.vtLink && (
+                          <a href={r.vtLink} target="_blank" rel="noreferrer"
+                            style={{ color: "var(--accent-cyan)", textDecoration: "none" }}>
+                            VT report ↗
+                          </a>
+                        )}
                       </div>
                     </div>
                   );

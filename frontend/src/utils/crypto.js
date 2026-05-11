@@ -70,6 +70,18 @@ export function generateZKLink(checksum, password) {
   return `${window.location.origin}/zk/${token}`;
 }
 
+export function generatePassword(length = 20, opts = { upper: true, lower: true, digits: true, symbols: true }) {
+  const sets = [];
+  if (opts.upper)   sets.push("ABCDEFGHJKMNPQRSTUVWXYZ");  // exclude I, L, O (ambiguous)
+  if (opts.lower)   sets.push("abcdefghjkmnpqrstuvwxyz");  // exclude i, l, o
+  if (opts.digits)  sets.push("23456789");                 // exclude 0, 1
+  if (opts.symbols) sets.push("!@#$%^&*+-=?_~");
+  const charset = sets.join("");
+  if (!charset) return "";
+  const rand = crypto.getRandomValues(new Uint32Array(length));
+  return Array.from(rand, n => charset[n % charset.length]).join("");
+}
+
 export function passwordStrength(pw) {
   let score = 0;
   if (pw.length >= 8)            score++;
