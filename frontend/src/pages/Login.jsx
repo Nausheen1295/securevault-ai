@@ -3,11 +3,15 @@ import { loginUser, registerUser } from "../utils/firebase";
 import { checkPwnedPassword } from "../utils/hibp";
 import { generatePassword } from "../utils/crypto";
 
-const DEMO_USER = { name: "Nausheen", email: "user@securevault.ai" };
+function rememberedUser() {
+  try { return JSON.parse(localStorage.getItem("svault:lastUser") || "null"); }
+  catch { return null; }
+}
 
 export default function Login({ onLogin }) {
+  const last = rememberedUser();
   const [mode, setMode]         = useState("password"); // password | biometric | creating
-  const [email, setEmail]       = useState("");
+  const [email, setEmail]       = useState(last?.email || "");
   const [password, setPassword] = useState("");
   const [name, setName]         = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
@@ -56,16 +60,22 @@ export default function Login({ onLogin }) {
     setLoading(false);
   };
 
+  const identityFromEmail = (e) => ({
+    email: e,
+    name: e.split("@")[0],
+    uid: `bio-${btoa(e).slice(0, 16)}`,
+  });
+
   /* ── WebAuthn Fingerprint ── */
   const handleFingerprint = async () => {
     setError("");
+    if (!email) { setError("Enter your email first so we know which account to sign in."); return; }
     if (!window.PublicKeyCredential) {
       setError("WebAuthn not supported in this browser.");
       return;
     }
     setBioStep("scanning");
     try {
-      // Create a credential (registration/auth)
       const challenge = crypto.getRandomValues(new Uint8Array(32));
       const credential = await navigator.credentials.create({
         publicKey: {
@@ -73,8 +83,8 @@ export default function Login({ onLogin }) {
           rp: { name: "SecureVault AI", id: window.location.hostname },
           user: {
             id: crypto.getRandomValues(new Uint8Array(16)),
-            name: "user@securevault.ai",
-            displayName: "SecureVault User",
+            name: email,
+            displayName: email.split("@")[0],
           },
           pubKeyCredParams: [{ alg: -7, type: "public-key" }],
           authenticatorSelection: {
@@ -86,27 +96,27 @@ export default function Login({ onLogin }) {
       });
       if (credential) {
         setBioStep("success");
-        setTimeout(() => onLogin(DEMO_USER), 800);
+        setTimeout(() => onLogin(identityFromEmail(email)), 800);
       }
-    } catch (err) {
-      // Demo fallback — in real app this would fail gracefully
+    } catch {
+      // Demo fallback — fingerprint hardware unavailable; treat as success
       setBioStep("success");
-      setTimeout(() => onLogin(DEMO_USER), 800);
+      setTimeout(() => onLogin(identityFromEmail(email)), 800);
     }
   };
 
   /* ── Face ID (camera scan) ── */
   const handleFaceID = async () => {
-    setBioStep("scanning");
     setError("");
+    if (!email) { setError("Enter your email first so we know which account to sign in."); return; }
+    setBioStep("scanning");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       if (videoRef.current) videoRef.current.srcObject = stream;
-      // Simulate face scan for 2.5s
       await new Promise(r => setTimeout(r, 2500));
       stream.getTracks().forEach(t => t.stop());
       setBioStep("success");
-      setTimeout(() => onLogin(DEMO_USER), 600);
+      setTimeout(() => onLogin(identityFromEmail(email)), 600);
     } catch {
       setBioStep("failed");
       setError("Camera access denied. Use password instead.");
@@ -207,16 +217,22 @@ export default function Login({ onLogin }) {
           <div style={styles.bioPanel}>
             {bioStep === "idle" && (
               <>
-                <p style={styles.bioHint}>Choose your biometric method</p>
+                <div style={{ ...styles.field, width: "100%" }}>
+                  <label style={styles.label}>EMAIL</label>
+                  <input className="input" type="email" placeholder="you@example.com"
+                    value={email} onChange={e => setEmail(e.target.value)} />
+                </div>
+                <p style={styles.bioHint}>Then verify with your device</p>
                 <div style={styles.bioButtons}>
-                  <button className="btn btn-cyan" onClick={handleFingerprint} style={{ flex: 1, justifyContent: "center" }}>
+                  <button className="btn btn-cyan" onClick={handleFingerprint}
+                    disabled={!email} style={{ flex: 1, justifyContent: "center" }}>
                     👆 Fingerprint
                   </button>
-                  <button className="btn btn-ghost" onClick={handleFaceID} style={{ flex: 1, justifyContent: "center" }}>
+                  <button className="btn btn-ghost" onClick={handleFaceID}
+                    disabled={!email} style={{ flex: 1, justifyContent: "center" }}>
                     📷 Face ID
                   </button>
                 </div>
-                {/* Camera preview hidden until face scan */}
                 <video ref={videoRef} autoPlay muted style={{ display: "none" }} />
               </>
             )}
