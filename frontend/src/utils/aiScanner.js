@@ -1,18 +1,18 @@
-// Real AI Threat Scanner using VirusTotal API
-// Free tier: 4 requests/minute, 500/day
+// Real AI Threat Scanner using VirusTotal API via a server-side proxy.
+// In dev: Vite proxies /api/vt → virustotal.com/api/v3 and injects x-apikey.
+// In prod: /api/vt/[...path].js Vercel serverless function does the same.
+// The API key never lives in client code.
 
-const VT_API_KEY = "YOUR_VIRUSTOTAL_API_KEY"; // paste your key here
+const VT_BASE = "/api/vt";
 
 // ── ENTROPY ANALYSIS (runs locally, no API needed) ──
 export async function analyzeEntropy(file) {
   const buffer = await file.arrayBuffer();
   const bytes  = new Uint8Array(buffer.slice(0, 1024000)); // first 1MB
-  
-  // Count byte frequencies
+
   const freq = new Array(256).fill(0);
   bytes.forEach(b => freq[b]++);
-  
-  // Calculate Shannon entropy
+
   let entropy = 0;
   const len   = bytes.length;
   freq.forEach(f => {
@@ -21,100 +21,116 @@ export async function analyzeEntropy(file) {
       entropy -= p * Math.log2(p);
     }
   });
-  
+
   return +entropy.toFixed(2);
 }
 
 // ── FILE SIGNATURE CHECK (local) ──
 export function checkFileSignature(filename, size) {
   const ext = "." + filename.split(".").pop().toLowerCase();
-  
+
   const HIGH_RISK   = [".exe",".bat",".ps1",".vbs",".cmd",".msi",".scr",".jar",".com"];
   const MEDIUM_RISK = [".js",".vba",".macro",".zip",".rar",".7z"];
   const LOW_RISK    = [".pdf",".doc",".docx",".xls",".xlsx"];
-  
+
   if (HIGH_RISK.includes(ext))   return { risk: "HIGH",   reason: "High-risk executable file type" };
   if (MEDIUM_RISK.includes(ext)) return { risk: "MEDIUM", reason: "Potentially dangerous file type" };
   if (LOW_RISK.includes(ext))    return { risk: "LOW",    reason: "Low risk but review recommended" };
   if (size > 100 * 1024 * 1024)  return { risk: "MEDIUM", reason: "Very large file — manual review recommended" };
-  
+
   return { risk: "CLEAN", reason: "No signature threats detected" };
 }
 
-// ── VIRUSTOTAL SCAN (real AI) ──
+// ── VIRUSTOTAL SCAN (real, via proxy) ──
 export async function scanWithVirusTotal(file) {
+  // Free tier ceiling
+  if (file.size > 32 * 1024 * 1024) {
+    return { error: "File exceeds VirusTotal 32 MB free-tier limit" };
+  }
   try {
-    // Step 1: Upload file to VirusTotal
     const formData = new FormData();
     formData.append("file", file);
-    
-    const uploadRes = await fetch("https://www.virustotal.com/api/v3/files", {
+
+    const uploadRes = await fetch(`${VT_BASE}/files`, {
       method: "POST",
-      headers: { "x-apikey": VT_API_KEY },
       body: formData,
     });
-    
-    if (!uploadRes.ok) throw new Error("Upload failed");
+
+    if (!uploadRes.ok) {
+      const txt = await uploadRes.text();
+      throw new Error(`HTTP ${uploadRes.status} — ${txt.slice(0, 120)}`);
+    }
     const uploadData = await uploadRes.json();
-    const analysisId = uploadData.data.id;
-    
-    // Step 2: Poll for results (max 30 seconds)
-    for (let i = 0; i < 10; i++) {
+    const analysisId = uploadData?.data?.id;
+    if (!analysisId) throw new Error("No analysis ID returned");
+
+    // Poll for results — up to ~45 s
+    for (let i = 0; i < 15; i++) {
       await new Promise(r => setTimeout(r, 3000));
-      
-      const resultRes = await fetch(
-        `https://www.virustotal.com/api/v3/analyses/${analysisId}`,
-        { headers: { "x-apikey": VT_API_KEY } }
-      );
-      
+      const resultRes  = await fetch(`${VT_BASE}/analyses/${analysisId}`);
+      if (!resultRes.ok) continue;
       const resultData = await resultRes.json();
-      const status     = resultData.data.attributes.status;
-      
+      const status     = resultData?.data?.attributes?.status;
+
       if (status === "completed") {
-        const stats     = resultData.data.attributes.stats;
-        const malicious = stats.malicious || 0;
-        const total     = Object.values(stats).reduce((a, b) => a + b, 0);
-        
+        const stats      = resultData.data.attributes.stats;
+        const malicious  = stats.malicious  || 0;
+        const suspicious = stats.suspicious || 0;
+        const total      = Object.values(stats).reduce((a, b) => a + b, 0);
+        const flagged    = malicious + suspicious;
+
         return {
           malicious,
+          suspicious,
           total,
-          risk: malicious > 5  ? "HIGH"   :
-                malicious > 0  ? "MEDIUM" : "CLEAN",
-          confidence: Math.round((1 - malicious / total) * 100),
+          risk: malicious > 3 ? "HIGH" : flagged > 0 ? "MEDIUM" : "CLEAN",
+          confidence: Math.round((1 - flagged / Math.max(total, 1)) * 100),
           engines: stats,
-          vtLink: `https://www.virustotal.com/gui/file/${analysisId}`,
+          vtLink: `https://www.virustotal.com/gui/file-analysis/${analysisId}`,
         };
       }
     }
-    throw new Error("Scan timeout");
+    return { error: "VirusTotal scan timed out (queue is busy, try again)" };
   } catch (err) {
-    // Fall back to local analysis if API fails
-    console.warn("VirusTotal API error:", err.message);
-    return null;
+    return { error: err.message };
   }
 }
 
-// ── FULL SCAN (combines everything) ──
+// ── FULL SCAN (combines all signals) ──
 export async function fullScan(file) {
   const [entropy, signature, vtResult] = await Promise.all([
     analyzeEntropy(file),
     Promise.resolve(checkFileSignature(file.name, file.size)),
     scanWithVirusTotal(file),
   ]);
-  
-  // Combine results
-  const finalRisk = vtResult?.risk === "HIGH"   || signature.risk === "HIGH"   ? "HIGH"   :
-                    vtResult?.risk === "MEDIUM"  || signature.risk === "MEDIUM" ? "MEDIUM" :
-                    entropy > 7.5                                               ? "LOW"    : "CLEAN";
-  
+
+  const vtRisk    = vtResult?.risk;
+  const finalRisk =
+    vtRisk === "HIGH"   || signature.risk === "HIGH"   ? "HIGH"   :
+    vtRisk === "MEDIUM" || signature.risk === "MEDIUM" ? "MEDIUM" :
+    vtRisk === "CLEAN"                                 ? "CLEAN"  :
+    entropy > 7.5                                      ? "LOW"    : "CLEAN";
+
+  let detail;
+  if (vtResult?.malicious !== undefined) {
+    detail = vtResult.malicious > 0
+      ? `VirusTotal: ${vtResult.malicious}/${vtResult.total} engines flagged this file`
+      : `VirusTotal: clean (scanned by ${vtResult.total} engines)`;
+  } else {
+    detail = signature.reason + (vtResult?.error ? ` · VT: ${vtResult.error}` : "");
+  }
+
   return {
-    filename:   file.name,
-    size:       file.size,
+    file,
+    risk:        finalRisk,
+    type:        signature.reason,
+    detail,
     entropy,
-    signature,
-    virustotal: vtResult,
-    finalRisk,
-    confidence: vtResult?.confidence ?? (finalRisk === "CLEAN" ? 95 : 75),
-    scannedAt:  new Date().toISOString(),
+    confidence:  vtResult?.confidence ?? (finalRisk === "CLEAN" ? 95 : 75),
+    vtLink:      vtResult?.vtLink,
+    vtMalicious: vtResult?.malicious,
+    vtTotal:     vtResult?.total,
+    vtError:     vtResult?.error,
+    scannedAt:   new Date().toISOString(),
   };
 }

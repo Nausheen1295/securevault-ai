@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { encryptFile, generateZKLink, sha256Hex } from "../utils/crypto";
+import { useState, useEffect } from "react";
+import QRCode from "qrcode";
+import { encryptFile } from "../utils/crypto";
 
 const MOCK_LINKS = [
   { id: 1, name: "Q4_Report.pdf", token: "abc123xyz", expires: "2025-03-15", views: 2, maxViews: 5, status: "ACTIVE" },
@@ -15,6 +16,16 @@ export default function ZeroKnowledgeShare() {
   const [generating, setGenerating] = useState(false);
   const [generatedLink, setGeneratedLink] = useState(null);
   const [copied, setCopied]   = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState("");
+
+  // Render the QR locally whenever a new link is generated
+  useEffect(() => {
+    if (!generatedLink?.fullLink) { setQrDataUrl(""); return; }
+    QRCode.toDataURL(generatedLink.fullLink, {
+      width: 180, margin: 1,
+      color: { dark: "#00e5ffff", light: "#0d152500" }, // cyan on transparent
+    }).then(setQrDataUrl).catch(() => setQrDataUrl(""));
+  }, [generatedLink]);
 
   const handleGenerate = async () => {
     if (!files.length || !password) return;
@@ -159,6 +170,17 @@ export default function ZeroKnowledgeShare() {
                   {copied ? "Copied!" : "Copy"}
                 </button>
               </div>
+              {qrDataUrl && (
+                <div style={styles.qrWrap}>
+                  <img src={qrDataUrl} alt="ZK share link QR" style={styles.qrImg} />
+                  <div style={styles.qrCaption}>
+                    📱 Scan to open the link on another device.<br/>
+                    <span style={{ color: "var(--accent-amber)" }}>
+                      Remember: send the password separately.
+                    </span>
+                  </div>
+                </div>
+              )}
               <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 6 }}>
                 Checksum: {generatedLink.checksum?.slice(0,24)}...
               </div>
@@ -239,4 +261,15 @@ const styles = {
   linkCardTop: { display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 },
   viewsRow: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 },
   linkActions: { display: "flex", gap: 8, alignItems: "center" },
+  qrWrap: {
+    display: "flex", alignItems: "center", gap: 14, marginTop: 12,
+    padding: 12, background: "rgba(0,229,255,0.04)",
+    border: "1px solid rgba(0,229,255,0.15)", borderRadius: "var(--radius-md)",
+  },
+  qrImg: {
+    width: 120, height: 120, flexShrink: 0,
+    background: "var(--bg-secondary)", borderRadius: 8, padding: 6,
+    boxShadow: "0 0 24px rgba(0,229,255,0.25)",
+  },
+  qrCaption: { fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.55 },
 };

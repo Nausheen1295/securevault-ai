@@ -1,5 +1,6 @@
-import { useState, useRef } from "react";
-import { encryptFile, decryptFile, passwordStrength } from "../utils/crypto";
+import { useState, useRef, useEffect } from "react";
+import { encryptFile, decryptFile, passwordStrength, generatePassword } from "../utils/crypto";
+import { checkPwnedPassword } from "../utils/hibp";
 
 export default function FileEncryptor() {
   const [files, setFiles]       = useState([]);
@@ -9,8 +10,22 @@ export default function FileEncryptor() {
   const [results, setResults]   = useState([]);
   const [loading, setLoading]   = useState(false);
   const [mode, setMode]         = useState("encrypt"); // encrypt | decrypt
+  const [pwned, setPwned]       = useState(null);
   const inputRef                = useRef();
   const pw                      = passwordStrength(password);
+
+  // Only check on encrypt mode (where the user is choosing a new password)
+  useEffect(() => {
+    if (mode !== "encrypt" || password.length < 4) { setPwned(null); return; }
+    setPwned({ checking: true });
+    const t = setTimeout(async () => {
+      try {
+        const r = await checkPwnedPassword(password);
+        setPwned({ count: r.count, checking: false });
+      } catch { setPwned(null); }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [password, mode]);
 
   const addFiles = (fl) => setFiles(p => [...p, ...Array.from(fl)]);
   const removeFile = (i) => setFiles(p => p.filter((_, j) => j !== i));
@@ -105,7 +120,14 @@ export default function FileEncryptor() {
         {/* Right — Password + action */}
         <div style={styles.rightPanel}>
           <div style={styles.section}>
-            <label style={styles.label}>MASTER PASSWORD</label>
+            <label style={styles.label}>
+              MASTER PASSWORD
+              {mode === "encrypt" && (
+                <button type="button" title="Generate strong password"
+                  onClick={() => { const p = generatePassword(20); setPassword(p); setConfirm(p); }}
+                  style={styles.diceBtn}>🎲 Generate</button>
+              )}
+            </label>
             <div style={styles.inputWrap}>
               <input className="input" type="password" placeholder="Enter strong password"
                 value={password} onChange={e => setPassword(e.target.value)} />
@@ -117,6 +139,21 @@ export default function FileEncryptor() {
                   <div style={{ ...styles.strengthFill, width: `${(pw.score / 5) * 100}%`, background: pw.color }} />
                 </div>
                 <span style={{ color: pw.color, fontSize: 11 }}>{pw.label}</span>
+              </div>
+            )}
+            {/* Breach check */}
+            {mode === "encrypt" && pwned && (
+              <div style={{ fontSize: 11, marginTop: 4 }}>
+                {pwned.checking
+                  ? <span style={{ color: "var(--text-muted)" }}>🔍 Checking breach database...</span>
+                  : pwned.count > 0
+                    ? <span style={{ color: "var(--accent-red)" }}>
+                        ⚠️ Found in {pwned.count.toLocaleString()} known breaches
+                      </span>
+                    : <span style={{ color: "var(--accent-green)" }}>
+                        ✅ Not in any known breach
+                      </span>
+                }
               </div>
             )}
           </div>
@@ -222,4 +259,11 @@ const styles = {
   resultRow: { padding: "8px 12px", background: "var(--bg-card)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" },
   resultName: { fontSize: 12, fontWeight: 600, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   resultHash: { fontSize: 10, color: "var(--text-muted)", marginTop: 2, fontFamily: "DM Mono, monospace" },
+  diceBtn: {
+    float: "right", background: "transparent",
+    border: "1px solid rgba(0,229,255,0.25)", borderRadius: 6,
+    color: "var(--accent-cyan)", fontSize: 10, padding: "2px 8px",
+    cursor: "pointer", fontFamily: "DM Mono, monospace",
+    letterSpacing: "0.05em",
+  },
 };

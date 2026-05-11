@@ -29,27 +29,53 @@ import {
   listAll
 } from "firebase/storage";
 
-// PASTE YOUR CONFIG HERE
+// Reads from Vite env vars first (VITE_FIREBASE_*), falls back to inline placeholders.
+// If config is incomplete, app runs in DEMO mode — see isFirebaseConfigured below.
+const env = import.meta.env;
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey:            env.VITE_FIREBASE_API_KEY             || "48d8c786aadbb009b9cb988ac3801b97b4048448e16c8cd55987a1c4e25dc71a",
+  authDomain:        env.VITE_FIREBASE_AUTH_DOMAIN         || "YOUR_AUTH_DOMAIN",
+  projectId:         env.VITE_FIREBASE_PROJECT_ID          || "YOUR_PROJECT_ID",
+  storageBucket:     env.VITE_FIREBASE_STORAGE_BUCKET      || "YOUR_STORAGE_BUCKET",
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "YOUR_SENDER_ID",
+  appId:             env.VITE_FIREBASE_APP_ID              || "YOUR_APP_ID",
 };
 
-// Initialize
-const app       = initializeApp(firebaseConfig);
-export const auth    = getAuth(app);
-export const db      = getFirestore(app);
-export const storage = getStorage(app);
+const isPlaceholder = (v) => !v || v.startsWith("YOUR_");
+export const isFirebaseConfigured =
+  !isPlaceholder(firebaseConfig.authDomain) &&
+  !isPlaceholder(firebaseConfig.projectId) &&
+  !isPlaceholder(firebaseConfig.appId);
+
+let app     = null;
+export let auth    = null;
+export let db      = null;
+export let storage = null;
+
+if (isFirebaseConfigured) {
+  app     = initializeApp(firebaseConfig);
+  auth    = getAuth(app);
+  db      = getFirestore(app);
+  storage = getStorage(app);
+} else if (typeof window !== "undefined") {
+  console.warn(
+    "[SecureVault] Firebase not configured — running in DEMO mode. " +
+    "Add VITE_FIREBASE_* env vars to .env (or edit firebase.js) for persistence."
+  );
+}
 
 // ── AUTH FUNCTIONS ──
 
+function demoUser(email) {
+  return { uid: `demo-${btoa(email).slice(0, 16)}`, email };
+}
+
 export async function registerUser(email, password, name) {
+  if (!isFirebaseConfigured) {
+    await new Promise(r => setTimeout(r, 400));
+    return demoUser(email);
+  }
   const result = await createUserWithEmailAndPassword(auth, email, password);
-  // Save user profile in Firestore
   await setDoc(doc(db, "users", result.user.uid), {
     name,
     email,
@@ -62,15 +88,21 @@ export async function registerUser(email, password, name) {
 }
 
 export async function loginUser(email, password) {
+  if (!isFirebaseConfigured) {
+    await new Promise(r => setTimeout(r, 400));
+    return demoUser(email);
+  }
   const result = await signInWithEmailAndPassword(auth, email, password);
   return result.user;
 }
 
 export async function logoutUser() {
+  if (!isFirebaseConfigured) return;
   await signOut(auth);
 }
 
 export function onAuthChange(callback) {
+  if (!isFirebaseConfigured) return () => {};
   return onAuthStateChanged(auth, callback);
 }
 
