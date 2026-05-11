@@ -1,14 +1,12 @@
 <div align="center">
 
-<!-- BANNER -->
 <img src="https://capsule-render.vercel.app/api?type=waving&color=0:00e5ff,100:7c3aed&height=200&section=header&text=SecureVault%20AI&fontSize=60&fontColor=ffffff&fontAlignY=35&desc=Next-Gen%20Cloud%20Security%20Platform&descAlignY=55&descSize=20" width="100%"/>
 
-<!-- BADGES -->
 ![React](https://img.shields.io/badge/React-18.2-61DAFB?style=for-the-badge&logo=react&logoColor=black)
 ![Vite](https://img.shields.io/badge/Vite-5.0-646CFF?style=for-the-badge&logo=vite&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Firebase-Ready-FFCA28?style=for-the-badge&logo=firebase&logoColor=black)
 ![Vercel](https://img.shields.io/badge/Deployed-Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+![License](https://img.shields.io/badge/License-All%20Rights%20Reserved-red?style=for-the-badge)
 
 <br/>
 
