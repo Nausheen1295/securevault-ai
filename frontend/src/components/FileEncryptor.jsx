@@ -17,6 +17,8 @@ export default function FileEncryptor() {
   const [savedFiles, setSavedFiles] = useState([]);  // [{ svaultName, blob, size }]
   const [showSavedPw, setShowSavedPw] = useState(true);
   const [copiedPw, setCopiedPw] = useState(false);
+  const [showPw,      setShowPw]      = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const inputRef                = useRef();
   const pw                      = passwordStrength(password);
 
@@ -185,8 +187,14 @@ export default function FileEncryptor() {
               </div>
             )}
             <div style={styles.inputWrap}>
-              <input className="input" type="password" placeholder="Enter strong password"
-                value={password} onChange={e => setPassword(e.target.value)} />
+              <input className="input" type={showPw ? "text" : "password"} placeholder="Enter strong password"
+                value={password} onChange={e => setPassword(e.target.value)}
+                style={{ paddingRight: 56 }} />
+              <button type="button" onClick={() => setShowPw(s => !s)}
+                title={showPw ? "Hide password" : "Show password"}
+                style={styles.eyeBtn}>
+                {showPw ? "🙈" : "👁️"}
+              </button>
             </div>
             {/* Strength meter */}
             {password && (
@@ -217,10 +225,18 @@ export default function FileEncryptor() {
           {mode === "encrypt" && (
             <div style={styles.section}>
               <label style={styles.label}>CONFIRM PASSWORD</label>
-              <input className="input" type="password" placeholder="Repeat password"
-                value={confirm} onChange={e => setConfirm(e.target.value)} />
+              <div style={styles.inputWrap}>
+                <input className="input" type={showConfirm ? "text" : "password"} placeholder="Repeat password"
+                  value={confirm} onChange={e => setConfirm(e.target.value)}
+                  style={{ paddingRight: 56 }} />
+                <button type="button" onClick={() => setShowConfirm(s => !s)}
+                  title={showConfirm ? "Hide password" : "Show password"}
+                  style={styles.eyeBtn}>
+                  {showConfirm ? "🙈" : "👁️"}
+                </button>
+              </div>
               {confirm && password !== confirm && (
-                <span style={{ fontSize: 11, color: "var(--accent-red)", marginTop: 4 }}>Passwords don't match</span>
+                <span style={{ fontSize: 12, color: "var(--accent-red)", marginTop: 4 }}>Passwords don't match</span>
               )}
             </div>
           )}
@@ -368,6 +384,12 @@ const styles = {
   section:  { display: "flex", flexDirection: "column", gap: 8 },
   label:    { fontSize: 12, letterSpacing: "0.08em", color: "var(--text-secondary)", fontWeight: 700 },
   inputWrap: { position: "relative" },
+  eyeBtn: {
+    position: "absolute", top: 0, right: 0, height: "100%", width: 48,
+    background: "transparent", border: "none", cursor: "pointer",
+    fontSize: 16, color: "var(--text-secondary)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+  },
   strength: { display: "flex", alignItems: "center", gap: 10, marginTop: 6 },
   strengthTrack: { flex: 1, height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden" },
   strengthFill:  { height: "100%", borderRadius: 2, transition: "width 0.3s, background 0.3s" },

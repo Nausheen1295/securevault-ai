@@ -28,7 +28,7 @@ function lastUserEmail() {
   catch { return ""; }
 }
 
-export default function Login({ onBiometricLogin, theme, onToggleTheme, navigate, initialMode }) {
+export default function Login({ onBiometricLogin, onGuestLogin, theme, onToggleTheme, navigate, initialMode }) {
   // top-level mode
   const [mode, setMode] = useState(initialMode === "signup" ? "signup" : "signin");
   // signin sub-method
@@ -524,6 +524,12 @@ export default function Login({ onBiometricLogin, theme, onToggleTheme, navigate
           </div>
         )}
 
+        {onGuestLogin && (
+          <button onClick={onGuestLogin} style={styles.guestLink} type="button">
+            → Or continue as guest (no signup needed)
+          </button>
+        )}
+
         <div style={styles.footer}>
           🔒 Zero-knowledge encryption · Your keys never leave your device
         </div>
@@ -716,7 +722,18 @@ const styles = {
   },
   footer: {
     textAlign: "center", fontSize: 12, color: "var(--text-muted)",
-    marginTop: 22, letterSpacing: "0.04em", fontWeight: 500,
+    marginTop: 14, letterSpacing: "0.04em", fontWeight: 500,
+  },
+  guestLink: {
+    display: "block", width: "100%",
+    background: "transparent", border: "none",
+    color: "var(--text-secondary)",
+    fontSize: 13, fontWeight: 500, cursor: "pointer",
+    padding: "14px 0 4px",
+    marginTop: 16,
+    borderTop: "1px solid var(--border)",
+    fontFamily: "Inter, sans-serif",
+    textAlign: "center",
   },
 
   saveReminder: {

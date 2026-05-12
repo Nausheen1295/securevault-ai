@@ -7,11 +7,32 @@ import { onAuthChange, logoutUser, isFirebaseConfigured } from "./utils/firebase
 import "./index.css";
 
 const THEME_KEY = "svault:theme";
+const GUEST_KEY = "svault:guest";
 
 function loadTheme() {
   const saved = localStorage.getItem(THEME_KEY);
   if (saved === "light" || saved === "dark") return saved;
   return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
+function loadGuestSession() {
+  try {
+    const raw = localStorage.getItem(GUEST_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    return data && data.isGuest ? data : null;
+  } catch { return null; }
+}
+
+function createGuestUser() {
+  const id = "guest-" + Math.random().toString(36).slice(2, 12);
+  return {
+    uid:       id,
+    email:     "guest@securevault.local",
+    name:      "Guest User",
+    isGuest:   true,
+    createdAt: Date.now(),
+  };
 }
 
 export default function App() {
@@ -49,20 +70,36 @@ export default function App() {
     if (meta) meta.setAttribute("content", theme === "light" ? "#f4f6fb" : "#0a0e1a");
   }, [theme]);
 
-  // Subscribe to Firebase auth state
+  // Subscribe to Firebase auth state. Real account wins; otherwise fall back to a guest session.
   useEffect(() => {
-    if (!isFirebaseConfigured) { setUser(null); return; }
+    if (!isFirebaseConfigured) {
+      setUser(loadGuestSession());  // null if no guest session either
+      return;
+    }
     const unsub = onAuthChange((fbUser) => {
-      if (!fbUser) { setUser(null); return; }
-      setUser({
-        uid:   fbUser.uid,
-        email: fbUser.email,
-        name:  fbUser.displayName || fbUser.email.split("@")[0],
-      });
-      localStorage.setItem("svault:lastUser", JSON.stringify({ email: fbUser.email }));
+      if (fbUser) {
+        // Real account beats guest. Clear any lingering guest session.
+        localStorage.removeItem(GUEST_KEY);
+        setUser({
+          uid:   fbUser.uid,
+          email: fbUser.email,
+          name:  fbUser.displayName || fbUser.email.split("@")[0],
+        });
+        localStorage.setItem("svault:lastUser", JSON.stringify({ email: fbUser.email }));
+        return;
+      }
+      // No real account — restore guest if one exists
+      setUser(loadGuestSession());
     });
     return unsub;
   }, []);
+
+  const handleGuestLogin = () => {
+    const guest = createGuestUser();
+    localStorage.setItem(GUEST_KEY, JSON.stringify(guest));
+    setUser(guest);
+    navigate("/dashboard");
+  };
 
   const handleBiometricLogin = (userData) => {
     setUser(userData);
@@ -72,6 +109,7 @@ export default function App() {
 
   const handleLogout = async () => {
     try { await logoutUser(); } catch { /* ignore */ }
+    localStorage.removeItem(GUEST_KEY);
     setUser(null);
     navigate("/");
   };
@@ -106,6 +144,7 @@ export default function App() {
     return (
       <Login
         onBiometricLogin={handleBiometricLogin}
+        onGuestLogin={handleGuestLogin}
         theme={theme}
         onToggleTheme={toggleTheme}
         navigate={navigate}
@@ -122,7 +161,7 @@ export default function App() {
       return null;
     }
     return (
-      <Dashboard user={user} onLogout={handleLogout} theme={theme} onToggleTheme={toggleTheme} />
+      <Dashboard user={user} onLogout={handleLogout} theme={theme} onToggleTheme={toggleTheme} navigate={navigate} />
     );
   }
 
@@ -133,6 +172,7 @@ export default function App() {
       theme={theme}
       onToggleTheme={toggleTheme}
       isAuthenticated={!!user}
+      onGuestLogin={handleGuestLogin}
     />
   );
 }
