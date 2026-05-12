@@ -15,7 +15,8 @@ const NAV = [
   { id: "analytics",  icon: "📊", label: "Security Analytics",sub: "Risk Dashboard" },
 ];
 
-export default function Sidebar({ active, onChange, user, onLogout, onOpenProfile, theme, onToggleTheme }) {
+export default function Sidebar({ active, onChange, user, onLogout, onOpenProfile, onUpgradeAccount, theme, onToggleTheme }) {
+  const isGuest = !!user?.isGuest;
   const [bioAvailable, setBioAvailable] = useState(false);
   const [enrolled,     setEnrolled]     = useState(false);
   const [working,      setWorking]      = useState(false);
@@ -64,7 +65,11 @@ export default function Sidebar({ active, onChange, user, onLogout, onOpenProfil
           <div style={styles.brandName}>
             SecureVault <span style={{ color: "var(--accent-cyan)" }}>AI</span>
           </div>
-          <div style={styles.brandSub}>Next-Gen Cloud Security</div>
+          <div style={styles.brandSub}>
+            {isGuest
+              ? <span style={{ color: "var(--accent-amber)" }}>● Guest preview</span>
+              : "Next-Gen Cloud Security"}
+          </div>
         </div>
       </div>
 
@@ -99,8 +104,8 @@ export default function Sidebar({ active, onChange, user, onLogout, onOpenProfil
         </div>
       </div>
 
-      {/* Biometric enrollment */}
-      {bioAvailable && (
+      {/* Biometric enrollment — hidden for guests (no account to bind to) */}
+      {bioAvailable && !isGuest && (
         <div style={styles.bioBox}>
           <div style={styles.bioBoxHeader}>
             <span style={styles.statusLabel}>BIOMETRIC LOGIN</span>
@@ -128,19 +133,33 @@ export default function Sidebar({ active, onChange, user, onLogout, onOpenProfil
       {/* User box — click to open Profile */}
       <button onClick={onOpenProfile}
         style={{ ...styles.userBox, ...(active === "profile" ? styles.userBoxActive : {}) }}
-        title="Open profile">
-        <div style={styles.avatar}>{user?.name?.[0]?.toUpperCase() ?? "U"}</div>
+        title={isGuest ? "Guest profile (browser session only)" : "Open profile"}>
+        <div style={{ ...styles.avatar, ...(isGuest ? styles.avatarGuest : {}) }}>
+          {isGuest ? "G" : (user?.name?.[0]?.toUpperCase() ?? "U")}
+        </div>
         <div style={{ flex: 1, overflow: "hidden", textAlign: "left" }}>
-          <div style={styles.userName}>{user?.name ?? "User"}</div>
-          <div style={styles.userEmail}>{user?.email ?? ""}</div>
+          <div style={styles.userName}>
+            {isGuest ? "Guest" : (user?.name ?? "User")}
+          </div>
+          <div style={styles.userEmail}>
+            {isGuest ? "Browser session only" : (user?.email ?? "")}
+          </div>
         </div>
         <span style={styles.userChevron}>›</span>
       </button>
 
+      {/* Create real account — guests only */}
+      {isGuest && onUpgradeAccount && (
+        <button onClick={onUpgradeAccount} style={styles.upgradeBtn}
+          title="Save your data — sign up for a real account">
+          ✨ Create real account
+        </button>
+      )}
+
       {/* Log out — clearly visible, hover shows tooltip */}
-      <button onClick={onLogout} style={styles.signOutBtn} title="Log out">
+      <button onClick={onLogout} style={styles.signOutBtn} title={isGuest ? "Exit guest mode" : "Log out"}>
         <span style={{ fontSize: 16 }}>⎋</span>
-        Log Out
+        {isGuest ? "Exit Guest Mode" : "Log Out"}
       </button>
     </aside>
   );
@@ -275,6 +294,21 @@ const styles = {
     background: "linear-gradient(135deg, var(--accent-violet), var(--accent-cyan))",
     display: "flex", alignItems: "center", justifyContent: "center",
     fontSize: 15, fontWeight: 700, color: "white", flexShrink: 0,
+  },
+  avatarGuest: {
+    background: "linear-gradient(135deg, var(--accent-amber), #b45309)",
+  },
+  upgradeBtn: {
+    marginTop: 8,
+    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+    padding: "12px",
+    background: "linear-gradient(135deg, var(--accent-violet), #6d28d9)",
+    border: "none",
+    borderRadius: "var(--radius-md)",
+    color: "white",
+    fontSize: 14, fontWeight: 700, cursor: "pointer",
+    fontFamily: "Inter, sans-serif",
+    boxShadow: "var(--glow-violet)",
   },
   userName: {
     fontSize: 14, color: "var(--text-primary)", fontWeight: 600,

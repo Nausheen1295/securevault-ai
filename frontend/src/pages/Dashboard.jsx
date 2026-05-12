@@ -16,7 +16,7 @@ const FEATURE_VIEWS = {
   analytics:  <SecurityAnalytics />,
 };
 
-export default function Dashboard({ user, onLogout, theme, onToggleTheme }) {
+export default function Dashboard({ user, onLogout, theme, onToggleTheme, navigate }) {
   const [activeView, setActiveView] = useState("encrypt");
   const [lastFeature, setLastFeature] = useState("encrypt");
 
@@ -35,6 +35,7 @@ export default function Dashboard({ user, onLogout, theme, onToggleTheme }) {
         user={user}
         onLogout={onLogout}
         onOpenProfile={() => setActiveView("profile")}
+        onUpgradeAccount={() => navigate?.("/login?mode=signup")}
         theme={theme}
         onToggleTheme={onToggleTheme}
       />
@@ -42,7 +43,7 @@ export default function Dashboard({ user, onLogout, theme, onToggleTheme }) {
         {!isProfile && <StatsBar />}
         <div style={styles.content}>
           {isProfile
-            ? <Profile user={user} onLogout={onLogout} onBack={() => setActiveView(lastFeature)} />
+            ? <Profile user={user} onLogout={onLogout} onBack={() => setActiveView(lastFeature)} navigate={navigate} />
             : FEATURE_VIEWS[activeView]}
         </div>
       </main>

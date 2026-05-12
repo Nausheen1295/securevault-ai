@@ -34,7 +34,8 @@ function relativeTime(d) {
   return date.toLocaleDateString();
 }
 
-export default function Profile({ user, onLogout, onBack }) {
+export default function Profile({ user, onLogout, onBack, navigate }) {
+  const isGuest = !!user?.isGuest;
   const [profile,   setProfile]   = useState(null);
   const [files,     setFiles]     = useState([]);
   const [events,    setEvents]    = useState([]);
@@ -54,13 +55,22 @@ export default function Profile({ user, onLogout, onBack }) {
   const [deleteErr,  setDeleteErr]  = useState("");
   const [deletePhase,setDeletePhase]= useState("idle"); // idle | working
 
-  const isFirebaseUser = !!auth?.currentUser;
-  const biometricEnabled = isEnrolled(user?.email);
+  const isFirebaseUser = !isGuest && !!auth?.currentUser;
+  const biometricEnabled = !isGuest && isEnrolled(user?.email);
 
   // Load Firestore profile + files + activity
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      if (isGuest) {
+        // Synthesize a minimal profile so the rest of the UI doesn't break
+        setProfile({ name: user.name, createdAt: { toDate: () => new Date(user.createdAt || Date.now()) } });
+        setFiles([]);
+        setEvents([]);
+        setNameDraft(user.name);
+        setLoading(false);
+        return;
+      }
       if (!isFirebaseConfigured || !isFirebaseUser) {
         setLoading(false);
         return;
@@ -85,7 +95,7 @@ export default function Profile({ user, onLogout, onBack }) {
     }
     load();
     return () => { cancelled = true; };
-  }, [user?.uid, isFirebaseUser]);
+  }, [user?.uid, isFirebaseUser, isGuest]);
 
   const toast = (msg) => {
     setSavedToast(msg);
@@ -168,6 +178,26 @@ export default function Profile({ user, onLogout, onBack }) {
         {savedToast && <span style={styles.toast}>{savedToast}</span>}
       </div>
 
+      {/* Guest banner */}
+      {isGuest && (
+        <div style={styles.guestBanner}>
+          <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+            <div style={styles.guestIcon}>🛟</div>
+            <div style={{ flex: 1 }}>
+              <h3 style={styles.guestTitle}>You're in guest mode</h3>
+              <p style={styles.guestText}>
+                This is a preview — encryption, sharing, and scanning all work, but nothing is
+                saved to a real account. Close this tab and your data is gone. Files you encrypt
+                stay on your computer; share links stay valid because they're self-contained.
+              </p>
+            </div>
+            <button onClick={() => navigate?.("/login?mode=signup")} style={styles.guestUpgradeBtn}>
+              ✨ Create real account →
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header card */}
       <div style={styles.headerCard}>
         <div style={styles.avatarLarge}>{initial}</div>
@@ -193,9 +223,10 @@ export default function Profile({ user, onLogout, onBack }) {
           )}
           <div style={styles.email}>{user.email}</div>
           <div style={styles.badges}>
-            {otpVerified && <span className="badge badge-green">✓ Email verified (OTP)</span>}
-            {biometricEnabled && <span className="badge badge-cyan">👆 Biometric enabled</span>}
-            {!isFirebaseUser && <span className="badge badge-amber">Biometric session</span>}
+            {isGuest && <span className="badge badge-amber">🛟 Guest preview</span>}
+            {!isGuest && otpVerified && <span className="badge badge-green">✓ Email verified (OTP)</span>}
+            {!isGuest && biometricEnabled && <span className="badge badge-cyan">👆 Biometric enabled</span>}
+            {!isGuest && !isFirebaseUser && <span className="badge badge-amber">Biometric session</span>}
           </div>
         </div>
       </div>
@@ -219,7 +250,11 @@ export default function Profile({ user, onLogout, onBack }) {
           <span style={styles.rowHint}>Email is your sign-in identity and can't be changed here.</span>
         </Row>
         <Row label="Phone number">
-          {editingPhone ? (
+          {isGuest ? (
+            <span style={styles.rowHint}>
+              Sign up for a real account to save a phone number.
+            </span>
+          ) : editingPhone ? (
             <div style={styles.inlineEditRow}>
               <input className="input" type="tel" placeholder="+1 555 123 4567"
                 value={phoneDraft} onChange={e => setPhoneDraft(e.target.value)} autoFocus />
@@ -342,14 +377,16 @@ export default function Profile({ user, onLogout, onBack }) {
         </p>
 
         <div style={styles.dangerActions}>
-          <button onClick={onLogout} style={styles.logoutBtn} title="Log out">
-            ⎋ Log Out of this device
+          <button onClick={onLogout} style={styles.logoutBtn} title={isGuest ? "Exit guest mode" : "Log out"}>
+            ⎋ {isGuest ? "Exit Guest Mode" : "Log Out of this device"}
           </button>
-          <button onClick={() => setDeleteOpen(true)} style={styles.deleteAcctBtn}
-            disabled={!isFirebaseUser}
-            title={isFirebaseUser ? "Permanently delete your account" : "Available only for Firebase accounts"}>
-            🗑 Delete Account
-          </button>
+          {!isGuest && (
+            <button onClick={() => setDeleteOpen(true)} style={styles.deleteAcctBtn}
+              disabled={!isFirebaseUser}
+              title={isFirebaseUser ? "Permanently delete your account" : "Available only for Firebase accounts"}>
+              🗑 Delete Account
+            </button>
+          )}
         </div>
       </div>
 
@@ -652,5 +689,34 @@ const styles = {
     padding: "1px 6px", borderRadius: 4,
     fontFamily: "JetBrains Mono, monospace",
     fontSize: 12, color: "var(--accent-cyan)",
+  },
+
+  guestBanner: {
+    padding: 22,
+    background: "linear-gradient(135deg, rgba(251,191,36,0.10), rgba(167,139,250,0.10))",
+    border: "1.5px solid rgba(251,191,36,0.30)",
+    borderRadius: "var(--radius-lg)",
+    boxShadow: "var(--card-shadow)",
+  },
+  guestIcon: { fontSize: 32, lineHeight: 1 },
+  guestTitle: {
+    fontFamily: "Space Grotesk, sans-serif",
+    fontSize: 18, fontWeight: 700,
+    color: "var(--accent-amber)",
+    marginBottom: 6,
+  },
+  guestText: {
+    fontSize: 14, lineHeight: 1.6,
+    color: "var(--text-primary)",
+  },
+  guestUpgradeBtn: {
+    background: "linear-gradient(135deg, var(--accent-violet), #6d28d9)",
+    color: "white", border: "none",
+    padding: "12px 20px", borderRadius: "var(--radius-md)",
+    fontSize: 14, fontWeight: 700, cursor: "pointer",
+    fontFamily: "Inter, sans-serif",
+    whiteSpace: "nowrap",
+    flexShrink: 0,
+    boxShadow: "var(--glow-violet)",
   },
 };

@@ -149,7 +149,7 @@ const TRUST = [
   { label: "100% browser-side",      note: "No backend reads your data" },
 ];
 
-export default function Home({ navigate, theme, onToggleTheme, isAuthenticated }) {
+export default function Home({ navigate, theme, onToggleTheme, isAuthenticated, onGuestLogin }) {
   const [openFaq,  setOpenFaq]  = useState(0);
   const [openBlog, setOpenBlog] = useState(null);   // article id or null
 
@@ -273,6 +273,12 @@ export default function Home({ navigate, theme, onToggleTheme, isAuthenticated }
             </>
           )}
         </div>
+
+        {!isAuthenticated && onGuestLogin && (
+          <button onClick={onGuestLogin} style={styles.guestLink}>
+            → Or try it as a guest — no signup, browser-only
+          </button>
+        )}
 
         <div style={styles.trustRow} className="scroll-stagger">
           {TRUST.map((t, i) => (
@@ -648,7 +654,17 @@ const styles = {
     color: "var(--text-secondary)",
     maxWidth: 720, margin: "0 auto 36px",
   },
-  heroCtas: { display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginBottom: 56 },
+  heroCtas: { display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginBottom: 24 },
+  guestLink: {
+    background: "transparent", border: "none",
+    color: "var(--text-secondary)",
+    fontSize: 14, fontWeight: 500, cursor: "pointer",
+    padding: "10px 14px", marginBottom: 32,
+    fontFamily: "Inter, sans-serif",
+    textDecoration: "underline",
+    textUnderlineOffset: 4,
+    textDecorationColor: "var(--text-muted)",
+  },
 
   trustRow: {
     display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
