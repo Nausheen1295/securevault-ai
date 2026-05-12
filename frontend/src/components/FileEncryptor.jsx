@@ -11,8 +11,26 @@ export default function FileEncryptor() {
   const [loading, setLoading]   = useState(false);
   const [mode, setMode]         = useState("encrypt"); // encrypt | decrypt
   const [pwned, setPwned]       = useState(null);
+  const [pwLength, setPwLength] = useState(20);
+  const [savedPw, setSavedPw]   = useState("");      // password actually used to encrypt
+  const [savedFiles, setSavedFiles] = useState([]);  // [{ svaultName, blob, size }]
+  const [showSavedPw, setShowSavedPw] = useState(true);
+  const [copiedPw, setCopiedPw] = useState(false);
   const inputRef                = useRef();
   const pw                      = passwordStrength(password);
+
+  const copySavedPw = async () => {
+    try {
+      await navigator.clipboard.writeText(savedPw);
+      setCopiedPw(true);
+      setTimeout(() => setCopiedPw(false), 2200);
+    } catch { /* ignore */ }
+  };
+
+  const sliderFill = (val, min, max) => {
+    const pct = ((val - min) / (max - min)) * 100;
+    return `linear-gradient(to right, var(--accent-cyan) 0%, var(--accent-cyan) ${pct}%, var(--border) ${pct}%, var(--border) 100%)`;
+  };
 
   // Only check on encrypt mode (where the user is choosing a new password)
   useEffect(() => {
@@ -40,13 +58,17 @@ export default function FileEncryptor() {
     if (mode === "encrypt" && password !== confirm) return;
     setLoading(true);
     setResults([]);
+    setSavedPw("");
+    setSavedFiles([]);
     const out = [];
+    const produced = [];
     for (const f of files) {
       try {
         if (mode === "encrypt") {
           const res = await encryptFile(f, password);
           downloadBlob(res.blob, res.name);
-          out.push({ name: f.name, status: "✅ Encrypted", checksum: res.checksum.slice(0,16) + "…", size: formatBytes(res.size) });
+          produced.push({ svaultName: res.name, blob: res.blob, size: res.size });
+          out.push({ name: f.name, svaultName: res.name, status: "✅ Encrypted", checksum: res.checksum.slice(0,16) + "…", size: formatBytes(res.size) });
         } else {
           const res = await decryptFile(f, password);
           downloadBlob(res.blob, res.name);
@@ -57,8 +79,16 @@ export default function FileEncryptor() {
       }
     }
     setResults(out);
+    // If encryption succeeded for at least one file, remember the password + outputs
+    if (mode === "encrypt" && produced.length > 0) {
+      setSavedPw(password);
+      setSavedFiles(produced);
+      setShowSavedPw(true);
+    }
     setLoading(false);
   };
+
+  const redownload = (item) => downloadBlob(item.blob, item.svaultName);
 
   return (
     <div style={styles.page} className="fade-up">
@@ -124,10 +154,19 @@ export default function FileEncryptor() {
               MASTER PASSWORD
               {mode === "encrypt" && (
                 <button type="button" title="Generate strong password"
-                  onClick={() => { const p = generatePassword(20); setPassword(p); setConfirm(p); }}
-                  style={styles.diceBtn}>🎲 Generate</button>
+                  onClick={() => { const p = generatePassword(pwLength); setPassword(p); setConfirm(p); }}
+                  style={styles.diceBtn}>🎲 Generate ({pwLength})</button>
               )}
             </label>
+            {mode === "encrypt" && (
+              <div className="slider-row">
+                <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Length</span>
+                <input className="slider" type="range" min={8} max={64} value={pwLength}
+                  style={{ background: sliderFill(pwLength, 8, 64) }}
+                  onChange={e => setPwLength(+e.target.value)} />
+                <span className="slider-value">{pwLength}</span>
+              </div>
+            )}
             <div style={styles.inputWrap}>
               <input className="input" type="password" placeholder="Enter strong password"
                 value={password} onChange={e => setPassword(e.target.value)} />
@@ -186,6 +225,68 @@ export default function FileEncryptor() {
               : mode === "encrypt" ? "🔒 Encrypt & Download" : "🔓 Decrypt & Download"}
           </button>
 
+          {/* Password recap — only after a successful encrypt */}
+          {mode === "encrypt" && savedPw && (
+            <div style={styles.recapCard}>
+              <div style={styles.recapHeader}>
+                <span style={{ fontSize: 22 }}>🔑</span>
+                <span style={styles.recapTitle}>Save This Password</span>
+              </div>
+              <p style={styles.recapWarning}>
+                ⚠️ <strong>Write this down or save it somewhere safe.</strong> You'll need this exact
+                password to decrypt the file. We don't store it anywhere — if you lose it, the file
+                is permanently unrecoverable.
+              </p>
+
+              {/* Saved files list */}
+              {savedFiles.length > 0 && (
+                <div style={styles.savedFilesBox}>
+                  <div style={styles.savedFilesHeader}>
+                    <span style={{ fontSize: 16 }}>📦</span>
+                    <span style={styles.savedFilesTitle}>
+                      Encrypted {savedFiles.length} file{savedFiles.length === 1 ? "" : "s"} — downloaded to your device
+                    </span>
+                  </div>
+                  {savedFiles.map((f, i) => (
+                    <div key={i} style={styles.savedFileRow}>
+                      <div style={{ flex: 1, overflow: "hidden" }}>
+                        <div style={styles.savedFileName}>{f.svaultName}</div>
+                        <div style={styles.savedFileSize}>{formatBytes(f.size)}</div>
+                      </div>
+                      <button onClick={() => redownload(f)} style={styles.redownloadBtn}
+                        title="Re-download this encrypted file">
+                        ⬇ Re-download
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={styles.recapPwRow}>
+                <input className="input" readOnly
+                  type={showSavedPw ? "text" : "password"}
+                  value={savedPw}
+                  style={{
+                    flex: 1, fontFamily: "JetBrains Mono, monospace",
+                    letterSpacing: showSavedPw ? "0.04em" : "0.1em",
+                    color: "var(--accent-cyan)", fontSize: 15, fontWeight: 600,
+                  }} />
+                <button type="button" onClick={() => setShowSavedPw(s => !s)}
+                  title={showSavedPw ? "Hide password" : "Show password"}
+                  style={styles.recapIconBtn}>
+                  {showSavedPw ? "🙈" : "👁️"}
+                </button>
+                <button type="button" onClick={copySavedPw}
+                  style={{ ...styles.recapCopyBtn, ...(copiedPw ? styles.recapCopyBtnDone : {}) }}>
+                  {copiedPw ? "✓ Copied" : "📋 Copy"}
+                </button>
+              </div>
+              <div style={styles.decryptHint}>
+                <strong>To decrypt later:</strong> switch to the <span style={{ color: "var(--accent-cyan)" }}>🔓 Decrypt</span> tab above, drop your <code style={styles.codeChip}>.svault</code> file in, and paste this password.
+              </div>
+            </div>
+          )}
+
           {/* Results */}
           {results.length > 0 && (
             <div style={styles.results}>
@@ -220,50 +321,135 @@ function formatBytes(b) {
 }
 
 const styles = {
-  page:    { maxWidth: 900 },
-  header:  { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 },
-  title:   { fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 4 },
-  sub:     { fontSize: 12, color: "var(--text-muted)" },
-  modeSwitch: { display: "flex", gap: 6 },
-  modeBtn: { padding: "7px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", fontSize: 12, fontFamily: "DM Mono, monospace" },
-  modeBtnActive: { borderColor: "var(--accent-cyan)", color: "var(--accent-cyan)", background: "rgba(0,229,255,0.06)" },
-  grid:    { display: "grid", gridTemplateColumns: "1fr 360px", gap: 20 },
+  page:    { maxWidth: 1100 },
+  header:  { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 },
+  title:   { fontFamily: "Space Grotesk, sans-serif", fontSize: 28, fontWeight: 700, marginBottom: 6 },
+  sub:     { fontSize: 14, color: "var(--text-secondary)" },
+  modeSwitch: { display: "flex", gap: 8 },
+  modeBtn: { padding: "10px 18px", borderRadius: "var(--radius-md)", border: "1.5px solid var(--border-bright)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", fontSize: 14, fontWeight: 600, fontFamily: "Inter, sans-serif" },
+  modeBtnActive: { borderColor: "var(--accent-cyan)", color: "var(--accent-cyan)", background: "rgba(34,211,238,0.10)" },
+  grid:    { display: "grid", gridTemplateColumns: "1fr 400px", gap: 24 },
   dropzone: {
     border: "2px dashed var(--border-bright)",
-    borderRadius: "var(--radius-lg)", padding: "40px 20px",
+    borderRadius: "var(--radius-lg)", padding: "52px 24px",
     textAlign: "center", cursor: "pointer",
-    transition: "all 0.2s", marginBottom: 14,
+    transition: "all 0.2s", marginBottom: 16,
+    background: "var(--bg-card)",
   },
-  dropzoneActive: { borderColor: "var(--accent-cyan)", background: "rgba(0,229,255,0.04)" },
-  dropIcon: { fontSize: 36, marginBottom: 10 },
-  dropText: { fontSize: 14, fontWeight: 600, marginBottom: 4 },
-  dropSub:  { fontSize: 11, color: "var(--text-muted)" },
+  dropzoneActive: { borderColor: "var(--accent-cyan)", background: "rgba(34,211,238,0.06)" },
+  dropIcon: { fontSize: 44, marginBottom: 12 },
+  dropText: { fontSize: 16, fontWeight: 600, marginBottom: 6 },
+  dropSub:  { fontSize: 13, color: "var(--text-muted)" },
   fileList: { background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", overflow: "hidden" },
-  fileListHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: "1px solid var(--border)" },
-  fileItem: { display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: "1px solid var(--border)" },
-  fileExt:  { fontSize: 9, fontWeight: 700, padding: "2px 6px", background: "var(--bg-secondary)", borderRadius: 4, color: "var(--accent-cyan)", letterSpacing: "0.05em", flexShrink: 0 },
-  fileName: { fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  fileSize: { fontSize: 10, color: "var(--text-muted)" },
-  removeBtn: { background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, flexShrink: 0 },
-  rightPanel: { display: "flex", flexDirection: "column", gap: 16 },
-  section:  { display: "flex", flexDirection: "column", gap: 6 },
-  label:    { fontSize: 10, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600 },
+  fileListHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid var(--border)" },
+  fileItem: { display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", borderBottom: "1px solid var(--border)" },
+  fileExt:  { fontSize: 11, fontWeight: 700, padding: "3px 8px", background: "var(--bg-secondary)", borderRadius: 5, color: "var(--accent-cyan)", letterSpacing: "0.05em", flexShrink: 0, fontFamily: "JetBrains Mono, monospace" },
+  fileName: { fontSize: 14, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  fileSize: { fontSize: 12, color: "var(--text-muted)", marginTop: 2 },
+  removeBtn: { background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 14, flexShrink: 0 },
+  rightPanel: { display: "flex", flexDirection: "column", gap: 18 },
+  section:  { display: "flex", flexDirection: "column", gap: 8 },
+  label:    { fontSize: 12, letterSpacing: "0.08em", color: "var(--text-secondary)", fontWeight: 700 },
   inputWrap: { position: "relative" },
-  strength: { display: "flex", alignItems: "center", gap: 8, marginTop: 4 },
-  strengthTrack: { flex: 1, height: 3, background: "var(--border)", borderRadius: 2, overflow: "hidden" },
+  strength: { display: "flex", alignItems: "center", gap: 10, marginTop: 6 },
+  strengthTrack: { flex: 1, height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden" },
   strengthFill:  { height: "100%", borderRadius: 2, transition: "width 0.3s, background 0.3s" },
-  infoBox: { background: "rgba(0,229,255,0.03)", border: "1px solid rgba(0,229,255,0.1)", borderRadius: "var(--radius-md)", padding: 12, display: "flex", flexDirection: "column", gap: 6 },
-  infoRow: { display: "flex", gap: 8, fontSize: 11, color: "var(--text-secondary)" },
-  spinner: { width: 12, height: 12, border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "white", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" },
-  results: { display: "flex", flexDirection: "column", gap: 8, maxHeight: 200, overflowY: "auto" },
-  resultRow: { padding: "8px 12px", background: "var(--bg-card)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" },
-  resultName: { fontSize: 12, fontWeight: 600, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  resultHash: { fontSize: 10, color: "var(--text-muted)", marginTop: 2, fontFamily: "DM Mono, monospace" },
+  infoBox: { background: "rgba(34,211,238,0.05)", border: "1px solid rgba(34,211,238,0.18)", borderRadius: "var(--radius-md)", padding: 14, display: "flex", flexDirection: "column", gap: 8 },
+  infoRow: { display: "flex", gap: 10, fontSize: 13, color: "var(--text-secondary)" },
+  spinner: { width: 14, height: 14, border: "2px solid rgba(255,255,255,0.25)", borderTopColor: "white", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" },
+  results: { display: "flex", flexDirection: "column", gap: 10, maxHeight: 240, overflowY: "auto" },
+  resultRow: { padding: "12px 14px", background: "var(--bg-card)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" },
+  resultName: { fontSize: 14, fontWeight: 600, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  resultHash: { fontSize: 11, color: "var(--text-muted)", marginTop: 4, fontFamily: "JetBrains Mono, monospace" },
   diceBtn: {
     float: "right", background: "transparent",
-    border: "1px solid rgba(0,229,255,0.25)", borderRadius: 6,
-    color: "var(--accent-cyan)", fontSize: 10, padding: "2px 8px",
-    cursor: "pointer", fontFamily: "DM Mono, monospace",
-    letterSpacing: "0.05em",
+    border: "1.5px solid rgba(34,211,238,0.4)", borderRadius: 6,
+    color: "var(--accent-cyan)", fontSize: 11, padding: "3px 10px",
+    cursor: "pointer", fontFamily: "Inter, sans-serif", fontWeight: 600,
+    letterSpacing: "0.03em",
+  },
+  recapCard: {
+    padding: 20,
+    background: "rgba(251,191,36,0.06)",
+    border: "1.5px solid rgba(251,191,36,0.35)",
+    borderRadius: "var(--radius-lg)",
+    display: "flex", flexDirection: "column", gap: 14,
+  },
+  recapHeader: { display: "flex", alignItems: "center", gap: 12 },
+  recapTitle: {
+    fontFamily: "Space Grotesk, sans-serif",
+    fontSize: 18, fontWeight: 700,
+    color: "var(--accent-amber)",
+  },
+  recapWarning: {
+    fontSize: 13, color: "var(--text-primary)",
+    lineHeight: 1.55,
+  },
+  recapPwRow: { display: "flex", gap: 8, alignItems: "stretch" },
+  recapIconBtn: {
+    width: 44, padding: 0,
+    background: "var(--bg-secondary)",
+    border: "1.5px solid var(--border-bright)", borderRadius: "var(--radius-sm)",
+    color: "var(--text-secondary)", fontSize: 16,
+    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+  },
+  recapCopyBtn: {
+    padding: "0 18px",
+    background: "var(--accent-cyan)", color: "var(--bg-primary)",
+    border: "none", borderRadius: "var(--radius-sm)",
+    fontSize: 13, fontWeight: 700, cursor: "pointer",
+    fontFamily: "Inter, sans-serif",
+    minWidth: 100,
+  },
+  recapCopyBtnDone: { background: "var(--accent-green)" },
+  decryptHint: {
+    fontSize: 13, color: "var(--text-secondary)",
+    background: "var(--bg-secondary)",
+    padding: "12px 14px",
+    borderRadius: "var(--radius-sm)",
+    border: "1px solid var(--border)",
+    lineHeight: 1.55,
+  },
+  codeChip: {
+    background: "var(--bg-card)",
+    padding: "2px 6px", borderRadius: 4,
+    fontFamily: "JetBrains Mono, monospace",
+    fontSize: 12, color: "var(--accent-cyan)",
+  },
+  savedFilesBox: {
+    background: "var(--bg-secondary)",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-sm)",
+    padding: 14,
+    display: "flex", flexDirection: "column", gap: 10,
+  },
+  savedFilesHeader: { display: "flex", alignItems: "center", gap: 10 },
+  savedFilesTitle: {
+    fontSize: 13, fontWeight: 600,
+    color: "var(--text-primary)",
+  },
+  savedFileRow: {
+    display: "flex", alignItems: "center", gap: 10,
+    padding: "10px 12px",
+    background: "var(--bg-card)",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-sm)",
+  },
+  savedFileName: {
+    fontSize: 13, fontWeight: 600,
+    color: "var(--accent-cyan)",
+    fontFamily: "JetBrains Mono, monospace",
+    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+  },
+  savedFileSize: { fontSize: 11, color: "var(--text-muted)", marginTop: 2 },
+  redownloadBtn: {
+    padding: "6px 12px",
+    background: "transparent",
+    border: "1.5px solid var(--border-bright)",
+    borderRadius: 6,
+    color: "var(--text-secondary)",
+    fontSize: 12, fontWeight: 600, cursor: "pointer",
+    fontFamily: "Inter, sans-serif",
+    flexShrink: 0,
   },
 };

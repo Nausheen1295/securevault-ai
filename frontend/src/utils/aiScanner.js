@@ -97,19 +97,21 @@ export async function scanWithVirusTotal(file) {
 }
 
 // ── FULL SCAN (combines all signals) ──
-export async function fullScan(file) {
+// `sensitivity` 0-100. Higher = stricter (lower entropy threshold).
+export async function fullScan(file, sensitivity = 50) {
   const [entropy, signature, vtResult] = await Promise.all([
     analyzeEntropy(file),
     Promise.resolve(checkFileSignature(file.name, file.size)),
     scanWithVirusTotal(file),
   ]);
 
+  const entropyThreshold = 8.0 - (sensitivity / 100) * 2.0; // 8.0 → 6.0
   const vtRisk    = vtResult?.risk;
   const finalRisk =
     vtRisk === "HIGH"   || signature.risk === "HIGH"   ? "HIGH"   :
     vtRisk === "MEDIUM" || signature.risk === "MEDIUM" ? "MEDIUM" :
     vtRisk === "CLEAN"                                 ? "CLEAN"  :
-    entropy > 7.5                                      ? "LOW"    : "CLEAN";
+    entropy > entropyThreshold                         ? "LOW"    : "CLEAN";
 
   let detail;
   if (vtResult?.malicious !== undefined) {
