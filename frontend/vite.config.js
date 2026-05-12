@@ -3,10 +3,17 @@ import react from '@vitejs/plugin-react'
 
 // Dev-mode middleware that runs the Vercel-style serverless handler at api/chat.js.
 // In production, Vercel runs the same file natively as a Node function.
-function chatApiDevMiddleware() {
+function chatApiDevMiddleware(env) {
   return {
     name: 'chat-api-dev-middleware',
     configureServer(server) {
+      // Promote .env values onto process.env so api/chat.js (which reads
+      // process.env.GOOGLE_API_KEY) can find them in dev. Vercel does
+      // this automatically in production.
+      if (env.GOOGLE_API_KEY && !process.env.GOOGLE_API_KEY) {
+        process.env.GOOGLE_API_KEY = env.GOOGLE_API_KEY
+      }
+
       server.middlewares.use(async (req, res, next) => {
         if (!req.url || !req.url.startsWith('/api/chat')) return next()
 
@@ -42,7 +49,7 @@ function chatApiDevMiddleware() {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
-    plugins: [react(), chatApiDevMiddleware()],
+    plugins: [react(), chatApiDevMiddleware(env)],
     server: {
       port: 3000,
       proxy: {
