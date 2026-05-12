@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import QRCode from "qrcode";
 import { encryptFile } from "../utils/crypto";
+import { auth, logSecurityEvent } from "../utils/firebase";
 
 function downloadBlob(blob, name) {
   const url = URL.createObjectURL(blob);
@@ -124,6 +125,14 @@ export default function ZeroKnowledgeShare() {
 
     setLinks(p => [{ ...newLink, password: undefined, blob: undefined, fullLink: undefined }, ...p]);
     setGeneratedLink(newLink);
+    // Log a share event (no password, no blob, no link — just metadata)
+    if (auth?.currentUser) {
+      logSecurityEvent(auth.currentUser.uid, {
+        type:   "share",
+        detail: `Generated ZK share for ${originalName}`,
+        risk:   "SAFE",
+      }).catch(() => {});
+    }
     setFiles([]);
     setPassword("");
     setGenerating(false);

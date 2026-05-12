@@ -6,6 +6,7 @@ import {
   enrollBiometric,
   unenrollBiometric,
 } from "../utils/webauthn";
+import { useUserStats, computeThreatLevel, computeSecurityScore } from "../utils/userStats";
 
 const NAV = [
   { id: "encrypt",    icon: "🔐", label: "Encrypt / Decrypt", sub: "AES-256-GCM" },
@@ -17,6 +18,9 @@ const NAV = [
 
 export default function Sidebar({ active, onChange, user, onLogout, onOpenProfile, onUpgradeAccount, theme, onToggleTheme }) {
   const isGuest = !!user?.isGuest;
+  const { stats } = useUserStats(user);
+  const threat    = computeThreatLevel(stats);
+  const score     = computeSecurityScore(stats);
   const [bioAvailable, setBioAvailable] = useState(false);
   const [enrolled,     setEnrolled]     = useState(false);
   const [working,      setWorking]      = useState(false);
@@ -92,15 +96,23 @@ export default function Sidebar({ active, onChange, user, onLogout, onOpenProfil
       {/* Security status */}
       <div style={styles.statusBox}>
         <div style={styles.statusRow}>
-          <span style={styles.statusLabel}>THREAT LEVEL</span>
-          <span className="badge badge-green">LOW</span>
+          <span style={styles.statusLabel}
+            title="Highest risk level of files you've recently scanned with the AI Threat Scanner. LOW means no flagged scans; MEDIUM/HIGH means at least one file was flagged.">
+            THREAT LEVEL
+            {isGuest && <span style={styles.demoPill} title="Demo value. Sign up to see real data.">DEMO</span>}
+          </span>
+          <span className={`badge ${threat.badge}`}>{threat.level}</span>
         </div>
         <div style={styles.progressTrack}>
-          <div style={{ ...styles.progressFill, width: "18%", background: "var(--accent-green)" }} />
+          <div style={{ ...styles.progressFill, width: `${threat.percent}%`, background: threat.color }} />
         </div>
         <div style={styles.statusRow}>
-          <span style={styles.statusLabel}>SECURITY SCORE</span>
-          <span style={styles.scoreNum}>94/100</span>
+          <span style={styles.statusLabel}
+            title="Composite score (0–100). +40 baseline · +15 OTP-verified · +15 biometric enrolled · +up to 20 for encryption activity · +10 for using the threat scanner.">
+            SECURITY SCORE
+            {isGuest && <span style={styles.demoPill} title="Demo value. Sign up to see real data.">DEMO</span>}
+          </span>
+          <span style={styles.scoreNum}>{score}/100</span>
         </div>
       </div>
 
@@ -235,6 +247,16 @@ const styles = {
   statusLabel: {
     fontSize: 11, color: "var(--text-secondary)",
     fontWeight: 700, letterSpacing: "0.06em",
+    display: "inline-flex", alignItems: "center", gap: 6,
+    cursor: "help",
+  },
+  demoPill: {
+    fontSize: 9, fontWeight: 700,
+    color: "var(--accent-amber)",
+    background: "rgba(251,191,36,0.14)",
+    border: "1px solid rgba(251,191,36,0.40)",
+    padding: "1px 6px", borderRadius: 100,
+    letterSpacing: "0.06em",
   },
   scoreNum: {
     color: "var(--accent-cyan)", fontSize: 14, fontWeight: 700,

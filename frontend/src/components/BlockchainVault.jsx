@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { auth, saveBlockchainKey, logSecurityEvent } from "../utils/firebase";
 
 // Simulated blockchain — in production connects to Ethereum via ethers.js + MetaMask
 const MOCK_CHAIN = {
@@ -83,6 +84,16 @@ export default function BlockchainVault() {
       stored: new Date().toISOString().split("T")[0],
       txHash, status: "ACTIVE", uses: 0,
     }]);
+    // Persist to Firestore so blockchain key count is real on the dashboard
+    if (auth?.currentUser) {
+      const uid = auth.currentUser.uid;
+      saveBlockchainKey(uid, { label: newLabel, hash: hash.slice(0, 42), txHash }).catch(() => {});
+      logSecurityEvent(uid, {
+        type:   "blockchain",
+        detail: `Stored key hash for ${newLabel}`,
+        risk:   "SAFE",
+      }).catch(() => {});
+    }
     setNewLabel("");
     setNewPassword("");
     setStoring(false);
