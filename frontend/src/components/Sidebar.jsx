@@ -15,7 +15,7 @@ const NAV = [
   { id: "analytics",  icon: "📊", label: "Security Analytics",sub: "Risk Dashboard" },
 ];
 
-export default function Sidebar({ active, onChange, user, onLogout, theme, onToggleTheme }) {
+export default function Sidebar({ active, onChange, user, onLogout, onOpenProfile, theme, onToggleTheme }) {
   const [bioAvailable, setBioAvailable] = useState(false);
   const [enrolled,     setEnrolled]     = useState(false);
   const [working,      setWorking]      = useState(false);
@@ -125,19 +125,22 @@ export default function Sidebar({ active, onChange, user, onLogout, theme, onTog
         <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
       </button>
 
-      {/* User box */}
-      <div style={styles.userBox}>
+      {/* User box — click to open Profile */}
+      <button onClick={onOpenProfile}
+        style={{ ...styles.userBox, ...(active === "profile" ? styles.userBoxActive : {}) }}
+        title="Open profile">
         <div style={styles.avatar}>{user?.name?.[0]?.toUpperCase() ?? "U"}</div>
-        <div style={{ flex: 1, overflow: "hidden" }}>
+        <div style={{ flex: 1, overflow: "hidden", textAlign: "left" }}>
           <div style={styles.userName}>{user?.name ?? "User"}</div>
           <div style={styles.userEmail}>{user?.email ?? ""}</div>
         </div>
-      </div>
+        <span style={styles.userChevron}>›</span>
+      </button>
 
-      {/* Sign out — properly visible */}
-      <button onClick={onLogout} style={styles.signOutBtn}>
+      {/* Log out — clearly visible, hover shows tooltip */}
+      <button onClick={onLogout} style={styles.signOutBtn} title="Log out">
         <span style={{ fontSize: 16 }}>⎋</span>
-        Sign Out
+        Log Out
       </button>
     </aside>
   );
@@ -255,6 +258,17 @@ const styles = {
     borderRadius: "var(--radius-md)",
     border: "1px solid var(--border)",
     marginTop: 8,
+    cursor: "pointer",
+    width: "100%",
+    transition: "border-color 0.15s, background 0.15s",
+  },
+  userBoxActive: {
+    borderColor: "var(--accent-cyan)",
+    background: "rgba(34,211,238,0.06)",
+  },
+  userChevron: {
+    fontSize: 20, color: "var(--text-secondary)",
+    flexShrink: 0, paddingRight: 4,
   },
   avatar: {
     width: 38, height: 38, borderRadius: "50%",

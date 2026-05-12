@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
+import Home from "./pages/Home";
 import ZKReceive from "./pages/ZKReceive";
 import { onAuthChange, logoutUser, isFirebaseConfigured } from "./utils/firebase";
 import "./index.css";
@@ -18,6 +19,28 @@ export default function App() {
   const [user,  setUser]  = useState(undefined);
   const [theme, setTheme] = useState(loadTheme);
 
+  // Lightweight pathname-based router. No external lib — just enough to switch pages.
+  const [pathname, setPathname] = useState(window.location.pathname);
+  const [search,   setSearch]   = useState(window.location.search);
+
+  useEffect(() => {
+    const onPop = () => {
+      setPathname(window.location.pathname);
+      setSearch(window.location.search);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const navigate = useCallback((to) => {
+    if (window.location.pathname + window.location.search === to) return;
+    window.history.pushState(null, "", to);
+    const [p, q] = to.split("?");
+    setPathname(p || "/");
+    setSearch(q ? `?${q}` : "");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, []);
+
   // Apply theme
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -26,13 +49,11 @@ export default function App() {
     if (meta) meta.setAttribute("content", theme === "light" ? "#f4f6fb" : "#0a0e1a");
   }, [theme]);
 
-  // Subscribe to Firebase auth state — this is the source of truth.
-  // A fresh browser sees no session; the user must sign in.
+  // Subscribe to Firebase auth state
   useEffect(() => {
     if (!isFirebaseConfigured) { setUser(null); return; }
     const unsub = onAuthChange((fbUser) => {
       if (!fbUser) { setUser(null); return; }
-      if (!fbUser.emailVerified) { setUser(null); return; }   // block unverified
       setUser({
         uid:   fbUser.uid,
         email: fbUser.email,
@@ -43,21 +64,22 @@ export default function App() {
     return unsub;
   }, []);
 
-  // Biometric sign-in path — sets user state directly (no Firebase session).
   const handleBiometricLogin = (userData) => {
     setUser(userData);
     localStorage.setItem("svault:lastUser", JSON.stringify({ email: userData.email }));
+    navigate("/dashboard");
   };
 
   const handleLogout = async () => {
     try { await logoutUser(); } catch { /* ignore */ }
     setUser(null);
+    navigate("/");
   };
 
   const toggleTheme = () => setTheme(t => t === "dark" ? "light" : "dark");
 
   // Recipient page — runs without authentication. Just needs the link.
-  if (window.location.pathname.startsWith("/zk")) {
+  if (pathname.startsWith("/zk")) {
     return <ZKReceive theme={theme} onToggleTheme={toggleTheme} />;
   }
 
@@ -72,7 +94,45 @@ export default function App() {
     );
   }
 
-  return user
-    ? <Dashboard user={user} onLogout={handleLogout} theme={theme} onToggleTheme={toggleTheme} />
-    : <Login onBiometricLogin={handleBiometricLogin} theme={theme} onToggleTheme={toggleTheme} />;
+  // /login — Sign In / Create Account page
+  if (pathname.startsWith("/login")) {
+    if (user) {
+      // Already signed in — bounce to dashboard
+      navigate("/dashboard");
+      return null;
+    }
+    const params = new URLSearchParams(search);
+    const initialMode = params.get("mode") === "signup" ? "signup" : "signin";
+    return (
+      <Login
+        onBiometricLogin={handleBiometricLogin}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        navigate={navigate}
+        initialMode={initialMode}
+      />
+    );
+  }
+
+  // /dashboard or any logged-in-only path → Dashboard
+  if (pathname.startsWith("/dashboard")) {
+    if (!user) {
+      // Not authenticated — bounce to home
+      navigate("/");
+      return null;
+    }
+    return (
+      <Dashboard user={user} onLogout={handleLogout} theme={theme} onToggleTheme={toggleTheme} />
+    );
+  }
+
+  // Default: Home page (whether signed in or not)
+  return (
+    <Home
+      navigate={navigate}
+      theme={theme}
+      onToggleTheme={toggleTheme}
+      isAuthenticated={!!user}
+    />
+  );
 }
