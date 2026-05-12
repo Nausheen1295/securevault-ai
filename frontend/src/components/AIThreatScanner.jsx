@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { fullScan } from "../utils/aiScanner";
+import { auth, logSecurityEvent } from "../utils/firebase";
 
 const RISK_CONFIG = {
   HIGH:   { color: "var(--accent-red)",   bg: "rgba(255,59,107,0.08)",   badge: "badge-red",   icon: "🚨" },
@@ -50,6 +51,14 @@ export default function AIThreatScanner() {
       const result = await fullScan(f, sensitivity);
       out.push(result);
       setResults([...out]);
+      // Persist to Firestore so the dashboard threat counters reflect real scans
+      if (auth?.currentUser) {
+        logSecurityEvent(auth.currentUser.uid, {
+          type:   "scan",
+          detail: `Scanned ${f.name} → ${result.risk}`,
+          risk:   result.risk,           // CLEAN | LOW | MEDIUM | HIGH
+        }).catch(() => {});
+      }
     }
     setProgress(100);
     setCurrentFile("");

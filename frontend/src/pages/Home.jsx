@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Chatbot from "../components/Chatbot";
 
 const FEATURES = [
   {
@@ -490,6 +491,9 @@ export default function Home({ navigate, theme, onToggleTheme, isAuthenticated, 
           <span>v1.0 · {new Date().toLocaleDateString()}</span>
         </div>
       </footer>
+
+      {/* Floating chatbot */}
+      <Chatbot />
 
       {/* Article modal */}
       {article && (

@@ -7,6 +7,7 @@ import BlockchainVault from "../components/BlockchainVault";
 import ZeroKnowledgeShare from "../components/ZeroKnowledgeShare";
 import SecurityAnalytics from "../components/SecurityAnalytics";
 import Profile from "../components/Profile";
+import Chatbot from "../components/Chatbot";
 
 const FEATURE_VIEWS = {
   encrypt:    <FileEncryptor />,
@@ -40,13 +41,16 @@ export default function Dashboard({ user, onLogout, theme, onToggleTheme, naviga
         onToggleTheme={onToggleTheme}
       />
       <main style={styles.main}>
-        {!isProfile && <StatsBar />}
+        {!isProfile && <StatsBar user={user} />}
         <div style={styles.content}>
           {isProfile
             ? <Profile user={user} onLogout={onLogout} onBack={() => setActiveView(lastFeature)} navigate={navigate} />
             : FEATURE_VIEWS[activeView]}
         </div>
       </main>
+
+      {/* Floating chatbot — accessible from anywhere in the dashboard */}
+      <Chatbot />
     </div>
   );
 }
