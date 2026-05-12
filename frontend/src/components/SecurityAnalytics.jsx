@@ -40,7 +40,14 @@ const maxThreats = Math.max(...THREAT_HISTORY.map(t => t.threats));
 
 export default function SecurityAnalytics() {
   const [tab, setTab] = useState("overview");
+  const [monthRange, setMonthRange] = useState(6);
   const overallScore = Math.round(SCORE_BREAKDOWN.reduce((s, i) => s + i.score, 0) / SCORE_BREAKDOWN.length);
+
+  const visibleHistory = THREAT_HISTORY.slice(-monthRange);
+  const sliderFill = (val, min, max) => {
+    const pct = ((val - min) / (max - min)) * 100;
+    return `linear-gradient(to right, var(--accent-cyan) 0%, var(--accent-cyan) ${pct}%, var(--border) ${pct}%, var(--border) 100%)`;
+  };
 
   return (
     <div style={styles.page} className="fade-up">
@@ -54,8 +61,8 @@ export default function SecurityAnalytics() {
             <span style={styles.scoreNum}>{overallScore}</span>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>SECURITY SCORE</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--accent-green)" }}>Excellent</div>
+            <div style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.04em" }}>SECURITY SCORE</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-green)", marginTop: 2 }}>Excellent</div>
           </div>
         </div>
       </div>
@@ -136,9 +143,20 @@ export default function SecurityAnalytics() {
       {tab === "threats" && (
         <div>
           <div style={styles.chartCard}>
-            <h3 style={styles.sectionTitle}>Threats Detected & Blocked (Last 6 Months)</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 24, flexWrap: "wrap" }}>
+              <h3 style={{ ...styles.sectionTitle, marginBottom: 0 }}>
+                Threats Detected & Blocked (Last {monthRange} Month{monthRange === 1 ? "" : "s"})
+              </h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 240 }}>
+                <span style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 600 }}>Range</span>
+                <input className="slider" type="range" min={1} max={6} value={monthRange}
+                  style={{ background: sliderFill(monthRange, 1, 6), flex: 1 }}
+                  onChange={e => setMonthRange(+e.target.value)} />
+                <span className="slider-value" style={{ minWidth: 64 }}>{monthRange}mo</span>
+              </div>
+            </div>
             <div style={styles.chart}>
-              {THREAT_HISTORY.map((t, i) => (
+              {visibleHistory.map((t, i) => (
                 <div key={i} style={styles.chartCol}>
                   <div style={styles.chartBars}>
                     <div style={{
@@ -148,7 +166,7 @@ export default function SecurityAnalytics() {
                       border: "1px solid rgba(255,59,107,0.5)",
                       display: "flex", alignItems: "flex-start", justifyContent: "center",
                     }}>
-                      <span style={{ fontSize: 9, color: "var(--accent-red)", marginTop: 3 }}>{t.threats}</span>
+                      <span style={{ fontSize: 11, color: "var(--accent-red)", marginTop: 4, fontWeight: 600 }}>{t.threats}</span>
                     </div>
                     <div style={{
                       width: 20, borderRadius: "3px 3px 0 0",
@@ -157,7 +175,7 @@ export default function SecurityAnalytics() {
                       border: "1px solid rgba(0,255,136,0.5)",
                     }} />
                   </div>
-                  <span style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 6 }}>{t.month}</span>
+                  <span style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 8, fontWeight: 600 }}>{t.month}</span>
                 </div>
               ))}
             </div>
@@ -169,16 +187,16 @@ export default function SecurityAnalytics() {
 
           <div style={styles.threatSummary}>
             <div style={styles.threatStat}>
-              <span style={{ fontSize: 28, fontFamily: "Syne", fontWeight: 800, color: "var(--accent-red)" }}>34</span>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Total Threats</span>
+              <span style={{ fontSize: 32, fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "-0.02em", color: "var(--accent-red)" }}>34</span>
+              <span style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 500 }}>Total Threats</span>
             </div>
             <div style={styles.threatStat}>
-              <span style={{ fontSize: 28, fontFamily: "Syne", fontWeight: 800, color: "var(--accent-green)" }}>33</span>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Auto-Blocked</span>
+              <span style={{ fontSize: 32, fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "-0.02em", color: "var(--accent-green)" }}>33</span>
+              <span style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 500 }}>Auto-Blocked</span>
             </div>
             <div style={styles.threatStat}>
-              <span style={{ fontSize: 28, fontFamily: "Syne", fontWeight: 800, color: "var(--accent-cyan)" }}>97%</span>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Block Rate</span>
+              <span style={{ fontSize: 32, fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "-0.02em", color: "var(--accent-cyan)" }}>97%</span>
+              <span style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 500 }}>Block Rate</span>
             </div>
           </div>
         </div>
@@ -188,42 +206,42 @@ export default function SecurityAnalytics() {
 }
 
 const styles = {
-  page:   { maxWidth: 900 },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 },
-  title:  { fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 4 },
-  sub:    { fontSize: 12, color: "var(--text-muted)" },
-  scoreBadge: { display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "var(--bg-card)", border: "1px solid var(--border-bright)", borderRadius: "var(--radius-lg)" },
+  page:   { maxWidth: 1100 },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 },
+  title:  { fontFamily: "Space Grotesk, sans-serif", fontSize: 28, fontWeight: 700, marginBottom: 6 },
+  sub:    { fontSize: 14, color: "var(--text-secondary)" },
+  scoreBadge: { display: "flex", alignItems: "center", gap: 14, padding: "14px 20px", background: "var(--bg-card)", border: "1px solid var(--border-bright)", borderRadius: "var(--radius-lg)" },
   scoreRing: {
-    width: 52, height: 52, borderRadius: "50%",
+    width: 60, height: 60, borderRadius: "50%",
     background: "conic-gradient(var(--accent-green) 0% 94%, var(--border) 94%)",
     display: "flex", alignItems: "center", justifyContent: "center",
   },
-  scoreNum: { fontSize: 15, fontWeight: 800, fontFamily: "Syne, sans-serif", color: "var(--accent-green)" },
-  tabs:     { display: "flex", gap: 8, marginBottom: 20 },
-  tab:      { padding: "8px 16px", borderRadius: "var(--radius-md)", border: "1px solid var(--border)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", fontSize: 12, fontFamily: "DM Mono, monospace" },
-  tabActive: { borderColor: "var(--accent-cyan)", color: "var(--accent-cyan)", background: "rgba(0,229,255,0.06)" },
-  metricsGrid: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 },
-  metricCard: { padding: 16, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", display: "flex", flexDirection: "column", gap: 6, alignItems: "center", textAlign: "center" },
-  metricValue: { fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800 },
-  metricLabel: { fontSize: 10, color: "var(--text-muted)", lineHeight: 1.3 },
-  scoreSection: { background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: 20 },
-  sectionTitle: { fontFamily: "Syne, sans-serif", fontSize: 15, fontWeight: 700, marginBottom: 16 },
-  scoreList: { display: "flex", flexDirection: "column", gap: 12 },
-  scoreRow:  { display: "flex", alignItems: "center", gap: 10 },
-  scoreLabel: { fontSize: 12, color: "var(--text-secondary)", width: 180, flexShrink: 0 },
+  scoreNum: { fontSize: 17, fontWeight: 700, fontFamily: "Space Grotesk, sans-serif", color: "var(--accent-green)" },
+  tabs:     { display: "flex", gap: 10, marginBottom: 24 },
+  tab:      { padding: "11px 20px", borderRadius: "var(--radius-md)", border: "1.5px solid var(--border-bright)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", fontSize: 14, fontFamily: "Inter, sans-serif", fontWeight: 600 },
+  tabActive: { borderColor: "var(--accent-cyan)", color: "var(--accent-cyan)", background: "rgba(34,211,238,0.10)" },
+  metricsGrid: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 },
+  metricCard: { padding: 22, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", display: "flex", flexDirection: "column", gap: 8, alignItems: "center", textAlign: "center" },
+  metricValue: { fontFamily: "Space Grotesk, sans-serif", fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em" },
+  metricLabel: { fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.4, fontWeight: 500 },
+  scoreSection: { background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: 24 },
+  sectionTitle: { fontFamily: "Space Grotesk, sans-serif", fontSize: 18, fontWeight: 700, marginBottom: 18 },
+  scoreList: { display: "flex", flexDirection: "column", gap: 14 },
+  scoreRow:  { display: "flex", alignItems: "center", gap: 12 },
+  scoreLabel: { fontSize: 14, color: "var(--text-primary)", width: 200, flexShrink: 0, fontWeight: 500 },
   scoreBarWrap: { flex: 1 },
-  scoreTrack: { height: 6, background: "var(--border)", borderRadius: 3, overflow: "hidden" },
-  eventList: { display: "flex", flexDirection: "column", gap: 2 },
-  eventRow:  { display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", marginBottom: 6 },
-  eventDot:  { width: 8, height: 8, borderRadius: "50%", flexShrink: 0 },
-  eventText: { fontSize: 12, fontWeight: 500 },
-  eventTime: { fontSize: 10, color: "var(--text-muted)", marginTop: 2 },
-  chartCard: { background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: 20, marginBottom: 16 },
-  chart:     { display: "flex", gap: 20, alignItems: "flex-end", height: 160, paddingBottom: 20, borderBottom: "1px solid var(--border)", marginTop: 16 },
+  scoreTrack: { height: 8, background: "var(--border)", borderRadius: 4, overflow: "hidden" },
+  eventList: { display: "flex", flexDirection: "column", gap: 4 },
+  eventRow:  { display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", marginBottom: 8 },
+  eventDot:  { width: 10, height: 10, borderRadius: "50%", flexShrink: 0 },
+  eventText: { fontSize: 14, fontWeight: 500 },
+  eventTime: { fontSize: 12, color: "var(--text-muted)", marginTop: 2 },
+  chartCard: { background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: 24, marginBottom: 18 },
+  chart:     { display: "flex", gap: 24, alignItems: "flex-end", height: 180, paddingBottom: 22, borderBottom: "1px solid var(--border)", marginTop: 18 },
   chartCol:  { display: "flex", flexDirection: "column", alignItems: "center", flex: 1 },
-  chartBars: { display: "flex", gap: 4, alignItems: "flex-end" },
-  legend:    { display: "flex", gap: 16, marginTop: 12 },
-  legendItem:{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-muted)" },
-  threatSummary: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 },
-  threatStat: { padding: 20, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", display: "flex", flexDirection: "column", gap: 4, alignItems: "center" },
+  chartBars: { display: "flex", gap: 5, alignItems: "flex-end" },
+  legend:    { display: "flex", gap: 20, marginTop: 14 },
+  legendItem:{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)" },
+  threatSummary: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 },
+  threatStat: { padding: 24, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", display: "flex", flexDirection: "column", gap: 6, alignItems: "center" },
 };

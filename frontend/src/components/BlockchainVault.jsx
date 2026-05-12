@@ -104,7 +104,7 @@ export default function BlockchainVault() {
         </div>
         <div style={styles.networkBadge}>
           <span style={styles.networkDot} />
-          <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{MOCK_CHAIN.network}</span>
+          <span style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 600 }}>{MOCK_CHAIN.network}</span>
         </div>
       </div>
 
@@ -223,28 +223,28 @@ export default function BlockchainVault() {
 }
 
 const styles = {
-  page:   { maxWidth: 900 },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 },
-  title:  { fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 4 },
-  sub:    { fontSize: 12, color: "var(--text-muted)" },
-  networkBadge: { display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)" },
-  networkDot: { width: 6, height: 6, borderRadius: "50%", background: "var(--accent-green)", boxShadow: "0 0 6px var(--accent-green)" },
-  grid:   { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 },
-  walletCard: { padding: 16, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)" },
-  walletHeader: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 },
-  walletInfo: { display: "flex", flexDirection: "column", gap: 8, marginTop: 8 },
-  addrBox: { display: "flex", flexDirection: "column", gap: 2, padding: "8px 10px", background: "var(--bg-secondary)", borderRadius: "var(--radius-sm)" },
-  addr:   { fontSize: 11, color: "var(--accent-cyan)", fontFamily: "DM Mono, monospace", letterSpacing: "0.02em" },
-  storeCard: { padding: 16, background: "var(--bg-card)", border: "1px solid var(--border-bright)", borderRadius: "var(--radius-lg)" },
-  storeTitle: { fontFamily: "Syne, sans-serif", fontWeight: 700, marginBottom: 12, fontSize: 14 },
-  label: { fontSize: 10, letterSpacing: "0.1em", color: "var(--text-muted)", fontWeight: 600, display: "block", marginBottom: 4 },
-  logBox: { padding: 12, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", fontFamily: "DM Mono, monospace" },
-  logRow: { display: "flex", gap: 8, padding: "3px 0", borderBottom: "1px solid var(--border)" },
-  tableHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  table: { display: "flex", flexDirection: "column", gap: 10, maxHeight: 520, overflowY: "auto" },
-  keyRow: { padding: 14, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", transition: "border-color 0.2s" },
-  keyTop: { display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 8 },
-  keyLabel: { fontSize: 13, fontWeight: 600, marginBottom: 2 },
-  keyHash: { fontSize: 10, color: "var(--text-muted)", fontFamily: "DM Mono, monospace" },
-  keyMeta: { display: "flex", gap: 12, alignItems: "center", fontSize: 10, color: "var(--text-muted)" },
+  page:   { maxWidth: 1100 },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 },
+  title:  { fontFamily: "Space Grotesk, sans-serif", fontSize: 28, fontWeight: 700, marginBottom: 6 },
+  sub:    { fontSize: 14, color: "var(--text-secondary)" },
+  networkBadge: { display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)" },
+  networkDot: { width: 8, height: 8, borderRadius: "50%", background: "var(--accent-green)", boxShadow: "0 0 8px var(--accent-green)" },
+  grid:   { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 },
+  walletCard: { padding: 20, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)" },
+  walletHeader: { display: "flex", alignItems: "center", gap: 10, marginBottom: 14, fontSize: 15 },
+  walletInfo: { display: "flex", flexDirection: "column", gap: 10, marginTop: 10 },
+  addrBox: { display: "flex", flexDirection: "column", gap: 4, padding: "10px 12px", background: "var(--bg-secondary)", borderRadius: "var(--radius-sm)" },
+  addr:   { fontSize: 13, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.02em" },
+  storeCard: { padding: 20, background: "var(--bg-card)", border: "1px solid var(--border-bright)", borderRadius: "var(--radius-lg)" },
+  storeTitle: { fontFamily: "Space Grotesk, sans-serif", fontWeight: 700, marginBottom: 14, fontSize: 16 },
+  label: { fontSize: 12, letterSpacing: "0.08em", color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 },
+  logBox: { padding: 14, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", fontFamily: "JetBrains Mono, monospace" },
+  logRow: { display: "flex", gap: 10, padding: "4px 0", borderBottom: "1px solid var(--border)" },
+  tableHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  table: { display: "flex", flexDirection: "column", gap: 12, maxHeight: 600, overflowY: "auto" },
+  keyRow: { padding: 18, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", transition: "border-color 0.2s" },
+  keyTop: { display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 10 },
+  keyLabel: { fontSize: 15, fontWeight: 600, marginBottom: 4 },
+  keyHash: { fontSize: 12, color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" },
+  keyMeta: { display: "flex", gap: 16, alignItems: "center", fontSize: 12, color: "var(--text-secondary)" },
 };

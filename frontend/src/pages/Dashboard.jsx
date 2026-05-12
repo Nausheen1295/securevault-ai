@@ -15,16 +15,18 @@ const VIEWS = {
   analytics:  <SecurityAnalytics />,
 };
 
-export default function Dashboard({ user, onLogout }) {
+export default function Dashboard({ user, onLogout, theme, onToggleTheme }) {
   const [activeView, setActiveView] = useState("encrypt");
 
   return (
     <div style={styles.layout}>
-      <Sidebar 
-        active={activeView} 
-        onChange={setActiveView} 
-        user={user} 
-        onLogout={onLogout} 
+      <Sidebar
+        active={activeView}
+        onChange={setActiveView}
+        user={user}
+        onLogout={onLogout}
+        theme={theme}
+        onToggleTheme={onToggleTheme}
       />
       <main style={styles.main}>
         <StatsBar />
@@ -37,19 +39,19 @@ export default function Dashboard({ user, onLogout }) {
 }
 
 const styles = {
-  layout: { 
-    display: "flex", 
-    minHeight: "100vh" 
+  layout: {
+    display: "flex",
+    minHeight: "100vh",
   },
-  main: { 
-    flex: 1, 
-    display: "flex", 
-    flexDirection: "column", 
-    overflow: "hidden" 
+  main: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
   },
-  content: { 
-    flex: 1, 
-    padding: "24px", 
-    overflowY: "auto" 
+  content: {
+    flex: 1,
+    padding: "32px 40px",
+    overflowY: "auto",
   },
 };

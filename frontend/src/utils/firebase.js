@@ -1,10 +1,12 @@
 import { initializeApp } from "firebase/app";
-import { 
-  getAuth, 
+import {
+  getAuth,
   createUserWithEmailAndPassword,
-  signInWithEmailAndPassword, 
+  signInWithEmailAndPassword,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  sendEmailVerification,
+  reload,
 } from "firebase/auth";
 import { 
   getFirestore, 
@@ -76,6 +78,7 @@ export async function registerUser(email, password, name) {
     return demoUser(email);
   }
   const result = await createUserWithEmailAndPassword(auth, email, password);
+  // Save profile, then send the verification email
   await setDoc(doc(db, "users", result.user.uid), {
     name,
     email,
@@ -84,6 +87,7 @@ export async function registerUser(email, password, name) {
     filesEncrypted: 0,
     threatsBlocked: 0,
   });
+  await sendEmailVerification(result.user);
   return result.user;
 }
 
@@ -93,7 +97,16 @@ export async function loginUser(email, password) {
     return demoUser(email);
   }
   const result = await signInWithEmailAndPassword(auth, email, password);
+  // Refresh so emailVerified reflects the latest state
+  await reload(result.user);
   return result.user;
+}
+
+export async function resendVerificationEmail() {
+  if (!isFirebaseConfigured || !auth.currentUser) {
+    throw new Error("No user is currently signed in to resend verification for.");
+  }
+  await sendEmailVerification(auth.currentUser);
 }
 
 export async function logoutUser() {
