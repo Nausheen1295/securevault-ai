@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
-import { loginUser, registerUser, logoutUser, resendVerificationEmail, isFirebaseConfigured } from "../utils/firebase";
+import { useState, useEffect, useRef } from "react";
+import { loginUser, registerUser, logoutUser, isFirebaseConfigured } from "../utils/firebase";
 import { checkPwnedPassword } from "../utils/hibp";
 import { generatePassword } from "../utils/crypto";
+import { generateOtp, sendOtpEmail, isEmailJsConfigured } from "../utils/otp";
 import {
   isBiometricSupported,
   isPlatformAuthenticatorAvailable,
@@ -27,9 +28,9 @@ function lastUserEmail() {
   catch { return ""; }
 }
 
-export default function Login({ onBiometricLogin, theme, onToggleTheme }) {
+export default function Login({ onBiometricLogin, theme, onToggleTheme, navigate, initialMode }) {
   // top-level mode
-  const [mode, setMode] = useState("signin");       // signin | signup
+  const [mode, setMode] = useState(initialMode === "signup" ? "signup" : "signin");
   // signin sub-method
   const [signinMethod, setSigninMethod] = useState("password"); // password | biometric
 
@@ -47,6 +48,27 @@ export default function Login({ onBiometricLogin, theme, onToggleTheme }) {
   const [bioEnrolledHere, setBioEnrolledHere] = useState(false);
   const [pwLength, setPwLength] = useState(20);
   const [pwned,    setPwned]    = useState(null);
+
+  // OTP signup state
+  const [signupStep,   setSignupStep]   = useState("form");      // form | otp
+  const [pendingOtp,   setPendingOtp]   = useState("");          // the true OTP we sent
+  const [devOtp,       setDevOtp]       = useState("");          // shown only in dev mode
+  const [otpDigits,    setOtpDigits]    = useState(["","","","","",""]);
+  const [otpError,     setOtpError]     = useState("");
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpExpiresAt, setOtpExpiresAt] = useState(0);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const otpInputs = useRef([]);
+
+  // Copy-password feedback
+  const [copiedSignupPw, setCopiedSignupPw] = useState(false);
+
+  // Resend cooldown ticker
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
 
   // Discover whether the device can do biometric auth at all
   useEffect(() => {
@@ -84,16 +106,9 @@ export default function Login({ onBiometricLogin, theme, onToggleTheme }) {
     e.preventDefault();
     setError(""); setSuccess(""); setLoading(true);
     try {
-      const fbUser = await loginUser(email.trim(), password);
-      if (!fbUser.emailVerified) {
-        // Sign them right back out — App.jsx requires verified email
-        await logoutUser();
-        setError("Please verify your email before signing in. Check your inbox for the verification link.");
-        setSuccess("");
-      } else {
-        // App.jsx auth state will pick this up and route to Dashboard
-        setSuccess("Signed in. Loading your vault…");
-      }
+      await loginUser(email.trim(), password);
+      // App.jsx auth state will pick this up and route to Dashboard
+      setSuccess("Signed in. Loading your vault…");
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -101,7 +116,7 @@ export default function Login({ onBiometricLogin, theme, onToggleTheme }) {
     }
   };
 
-  /* ─────────────────── Create Account ─────────────────── */
+  /* ─────────────────── Create Account → send OTP ─────────────────── */
   const handleSignUp = async (e) => {
     e.preventDefault();
     setError(""); setSuccess("");
@@ -111,15 +126,19 @@ export default function Login({ onBiometricLogin, theme, onToggleTheme }) {
     if (!name.trim())            { setError("Please enter your name."); return; }
     setLoading(true);
     try {
-      await registerUser(email.trim(), password, name.trim());
-      // The user is now signed in, but unverified — App.jsx blocks entry until verified.
-      // Sign them out so they can sign in fresh after clicking the email link.
-      await logoutUser();
-      setSuccess(`Account created. We sent a verification email to ${email}. Click the link in that email, then sign in below.`);
-      // Switch back to sign-in tab and clear the form (keep email for convenience)
-      setMode("signin");
-      setSigninMethod("password");
-      setPassword(""); setConfirm(""); setName("");
+      const otp = generateOtp();
+      const send = await sendOtpEmail(email.trim(), otp, name.trim());
+      if (!send.ok) {
+        setError(send.error || "Couldn't send the OTP email. Try again.");
+        setLoading(false); return;
+      }
+      setPendingOtp(otp);
+      setDevOtp(send.dev ? otp : "");
+      setOtpExpiresAt(Date.now() + 10 * 60 * 1000); // 10 minutes
+      setOtpDigits(["","","","","",""]);
+      setOtpError("");
+      setResendCooldown(45);
+      setSignupStep("otp");
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -127,25 +146,70 @@ export default function Login({ onBiometricLogin, theme, onToggleTheme }) {
     }
   };
 
-  /* ─────────────────── Resend verification ─────────────────── */
-  const handleResend = async () => {
-    setError(""); setSuccess("");
-    setLoading(true);
-    try {
-      // To resend we need to be signed in. Sign in just for that, then sign out.
-      const fbUser = await loginUser(email.trim(), password);
-      if (fbUser.emailVerified) {
-        setSuccess("This email is already verified. Just sign in.");
-      } else {
-        await resendVerificationEmail();
-        setSuccess(`Verification email re-sent to ${email}.`);
-      }
-      await logoutUser();
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setLoading(false);
+  /* ─────────────────── Verify OTP → create Firebase account ─────────────────── */
+  const verifyOtpAndCreate = async (codeStr) => {
+    if (otpVerifying) return;
+    setOtpError("");
+    if (Date.now() > otpExpiresAt) {
+      setOtpError("This code has expired. Tap Resend to get a fresh one.");
+      return;
     }
+    if (codeStr !== pendingOtp) {
+      setOtpError("That code is incorrect. Check your email and try again.");
+      return;
+    }
+    setOtpVerifying(true);
+    try {
+      await registerUser(email.trim(), password, name.trim());
+      // App.jsx's onAuthChange will pick the user up and route them to the dashboard
+      setSuccess("Verified. Signing you in…");
+      // Clear sensitive transient state
+      setPendingOtp(""); setDevOtp(""); setOtpDigits(["","","","","",""]);
+    } catch (err) {
+      setOtpError(friendlyError(err));
+      setOtpVerifying(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return;
+    setOtpError("");
+    const otp = generateOtp();
+    const send = await sendOtpEmail(email.trim(), otp, name.trim());
+    if (!send.ok) { setOtpError(send.error || "Couldn't resend."); return; }
+    setPendingOtp(otp);
+    setDevOtp(send.dev ? otp : "");
+    setOtpExpiresAt(Date.now() + 10 * 60 * 1000);
+    setResendCooldown(45);
+  };
+
+  const onOtpDigit = (i, val) => {
+    if (val && !/^\d$/.test(val)) return;
+    const next = [...otpDigits];
+    next[i] = val.slice(-1);
+    setOtpDigits(next);
+    if (val && i < 5) otpInputs.current[i + 1]?.focus();
+    if (next.every(d => d !== "")) verifyOtpAndCreate(next.join(""));
+  };
+  const onOtpKey = (i, e) => {
+    if (e.key === "Backspace" && !otpDigits[i] && i > 0) otpInputs.current[i - 1]?.focus();
+  };
+  const onOtpPaste = (e) => {
+    const txt = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (txt.length === 6) {
+      const next = txt.split("");
+      setOtpDigits(next);
+      verifyOtpAndCreate(txt);
+      e.preventDefault();
+    }
+  };
+
+  const copySignupPassword = async () => {
+    try {
+      await navigator.clipboard.writeText(password);
+      setCopiedSignupPw(true);
+      setTimeout(() => setCopiedSignupPw(false), 2200);
+    } catch { /* ignore */ }
   };
 
   /* ─────────────────── Biometric Sign In ─────────────────── */
@@ -182,25 +246,32 @@ export default function Login({ onBiometricLogin, theme, onToggleTheme }) {
       <div style={{ ...styles.orb, top: "10%", left: "15%", background: "radial-gradient(circle, rgba(167,139,250,0.18) 0%, transparent 70%)" }} />
       <div style={{ ...styles.orb, bottom: "15%", right: "10%", background: "radial-gradient(circle, rgba(34,211,238,0.14) 0%, transparent 70%)" }} />
 
-      {/* Floating theme toggle */}
-      <button onClick={onToggleTheme} style={styles.themeFloat} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
-        {theme === "dark" ? "☀️" : "🌙"}
-      </button>
+      {/* Floating top-right controls */}
+      <div style={styles.topRightControls}>
+        {navigate && (
+          <button onClick={() => navigate("/")} style={styles.homeFloat} title="Back to home">
+            ← Home
+          </button>
+        )}
+        <button onClick={onToggleTheme} style={styles.themeFloat} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+          {theme === "dark" ? "☀️" : "🌙"}
+        </button>
+      </div>
 
       <div style={styles.card} className="fade-up">
-        {/* Logo */}
-        <div style={styles.logo}>
+        {/* Logo — clickable, navigates home */}
+        <button onClick={() => navigate?.("/")} style={styles.logoBtn} title="Back to home">
           <div style={styles.logoIcon}>
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" strokeWidth="2.5">
               <rect x="3" y="11" width="18" height="11" rx="2"/>
               <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
           </div>
-          <div>
+          <div style={{ textAlign: "left" }}>
             <div style={styles.logoName}>SecureVault <span style={{ color: "var(--accent-cyan)" }}>AI</span></div>
             <div style={styles.logoSub}>Next-Gen Cloud Security</div>
           </div>
-        </div>
+        </button>
 
         <div style={styles.divider} />
 
@@ -239,11 +310,7 @@ export default function Login({ onBiometricLogin, theme, onToggleTheme }) {
                   <PasswordInput value={password} onChange={setPassword} show={showPw} onToggle={() => setShowPw(s => !s)} placeholder="Your password" />
                 </Field>
 
-                {error   && <Banner kind="error">{error}{error.includes("verify your email") && (
-                  <button type="button" onClick={handleResend} disabled={loading} style={styles.linkBtn}>
-                    Resend verification email
-                  </button>
-                )}</Banner>}
+                {error   && <Banner kind="error">{error}</Banner>}
                 {success && <Banner kind="success">{success}</Banner>}
 
                 <button className="btn btn-primary" type="submit" disabled={loading || !email || !password}
@@ -327,7 +394,7 @@ export default function Login({ onBiometricLogin, theme, onToggleTheme }) {
         )}
 
         {/* ── Create Account ── */}
-        {mode === "signup" && (
+        {mode === "signup" && signupStep === "form" && (
           <form onSubmit={handleSignUp} style={styles.form}>
             <Field label="NAME">
               <input className="input" type="text" placeholder="Your name"
@@ -354,6 +421,21 @@ export default function Login({ onBiometricLogin, theme, onToggleTheme }) {
                 <span className="slider-value">{pwLength}</span>
               </div>
               <PasswordInput value={password} onChange={setPassword} show={showPw} onToggle={() => setShowPw(s => !s)} placeholder="At least 8 characters" />
+              {password && (
+                <div style={styles.saveReminder}>
+                  <div style={styles.saveReminderTop}>
+                    <span style={{ fontSize: 14 }}>💡</span>
+                    <span style={styles.saveReminderText}>
+                      <strong>Save this password.</strong> You'll need it to sign in next time.
+                      Click 👁️ to reveal, then copy it somewhere safe (password manager, notes app).
+                    </span>
+                  </div>
+                  <button type="button" onClick={copySignupPassword}
+                    style={{ ...styles.saveCopyBtn, ...(copiedSignupPw ? styles.saveCopyBtnDone : {}) }}>
+                    {copiedSignupPw ? "✓ Copied" : "📋 Copy password"}
+                  </button>
+                </div>
+              )}
               {pwned && (
                 <div style={styles.pwnedRow}>
                   {pwned.checking
@@ -379,13 +461,67 @@ export default function Login({ onBiometricLogin, theme, onToggleTheme }) {
             <button className="btn btn-primary" type="submit"
               disabled={loading || !email || !password || !name || password !== confirm}
               style={{ width: "100%", justifyContent: "center", marginTop: 4 }}>
-              {loading ? <><span style={styles.spinner} /> Creating account…</> : "Create Account →"}
+              {loading ? <><span style={styles.spinner} /> Sending code…</> : "Send Verification Code →"}
             </button>
 
             <p style={styles.disclaimer}>
-              We'll send a verification link to your email. You must click it before signing in.
+              We'll email you a <strong>6-digit code</strong>. Enter it on the next screen to verify your email and finish creating your account.
             </p>
           </form>
+        )}
+
+        {/* ── OTP Verification ── */}
+        {mode === "signup" && signupStep === "otp" && (
+          <div style={styles.form}>
+            <h3 style={styles.otpTitle}>Enter the 6-digit code</h3>
+            <p style={styles.otpHint}>
+              We sent it to <strong style={{ color: "var(--accent-cyan)" }}>{email}</strong>.
+              Check your inbox (and spam folder). The code expires in 10 minutes.
+            </p>
+
+            {devOtp && (
+              <div style={styles.devBanner}>
+                🛠️ <strong>Dev mode</strong> — EmailJS isn't configured, so no email was sent.
+                Your code for testing: <strong style={styles.devOtpCode}>{devOtp}</strong>
+                <br/>
+                <span style={{ fontSize: 12 }}>
+                  To send real emails, add <code style={styles.codeChip}>VITE_EMAILJS_*</code> values to <code style={styles.codeChip}>.env</code>.
+                </span>
+              </div>
+            )}
+
+            <div style={styles.otpRow} onPaste={onOtpPaste}>
+              {otpDigits.map((d, i) => (
+                <input key={i}
+                  ref={el => otpInputs.current[i] = el}
+                  type="text" inputMode="numeric" pattern="\d*"
+                  maxLength={1}
+                  value={d}
+                  disabled={otpVerifying}
+                  onChange={e => onOtpDigit(i, e.target.value)}
+                  onKeyDown={e => onOtpKey(i, e)}
+                  style={styles.otpBox} />
+              ))}
+            </div>
+
+            {otpError && <Banner kind="error">{otpError}</Banner>}
+            {otpVerifying && (
+              <div style={{ textAlign: "center", fontSize: 13, color: "var(--accent-cyan)" }}>
+                <span style={styles.spinner} /> Creating your account…
+              </div>
+            )}
+
+            <div style={styles.otpActions}>
+              <button type="button" onClick={() => setSignupStep("form")}
+                style={styles.linkBtnPlain}>
+                ← Back
+              </button>
+              <button type="button" onClick={handleResendOtp} disabled={resendCooldown > 0}
+                style={{ ...styles.linkBtnPlain, opacity: resendCooldown > 0 ? 0.45 : 1 }}>
+                {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+              </button>
+            </div>
+          </div>
         )}
 
         <div style={styles.footer}>
@@ -454,8 +590,19 @@ const styles = {
     opacity: 0.25,
   },
   orb: { position: "absolute", width: 440, height: 440, borderRadius: "50%", pointerEvents: "none" },
-  themeFloat: {
+  topRightControls: {
     position: "absolute", top: 24, right: 28,
+    display: "flex", gap: 10, zIndex: 10,
+  },
+  homeFloat: {
+    height: 44, padding: "0 16px", borderRadius: 12,
+    background: "var(--bg-card)", border: "1px solid var(--border-bright)",
+    color: "var(--text-primary)", fontSize: 14, fontWeight: 600,
+    cursor: "pointer", display: "flex", alignItems: "center",
+    boxShadow: "var(--shadow-md)",
+    fontFamily: "Inter, sans-serif",
+  },
+  themeFloat: {
     width: 44, height: 44, borderRadius: 12,
     background: "var(--bg-card)", border: "1px solid var(--border-bright)",
     color: "var(--text-primary)", fontSize: 18,
@@ -470,7 +617,11 @@ const styles = {
     padding: "36px 36px 28px",
     boxShadow: "var(--shadow-md), 0 0 80px rgba(0,0,0,0.35)",
   },
-  logo: { display: "flex", alignItems: "center", gap: 16, marginBottom: 22 },
+  logoBtn: {
+    display: "flex", alignItems: "center", gap: 16, marginBottom: 22,
+    background: "transparent", border: "none", cursor: "pointer",
+    padding: 0, fontFamily: "Inter, sans-serif",
+  },
   logoIcon: {
     width: 52, height: 52, borderRadius: 14,
     background: "linear-gradient(135deg, rgba(34,211,238,0.14), rgba(167,139,250,0.20))",
@@ -566,5 +717,71 @@ const styles = {
   footer: {
     textAlign: "center", fontSize: 12, color: "var(--text-muted)",
     marginTop: 22, letterSpacing: "0.04em", fontWeight: 500,
+  },
+
+  saveReminder: {
+    padding: 12,
+    background: "rgba(251,191,36,0.06)",
+    border: "1px solid rgba(251,191,36,0.30)",
+    borderRadius: "var(--radius-sm)",
+    display: "flex", flexDirection: "column", gap: 10,
+  },
+  saveReminderTop: { display: "flex", gap: 10, alignItems: "flex-start" },
+  saveReminderText: {
+    fontSize: 13, color: "var(--text-primary)", lineHeight: 1.55,
+  },
+  saveCopyBtn: {
+    alignSelf: "flex-start",
+    padding: "8px 16px",
+    background: "var(--accent-cyan)", color: "var(--bg-primary)",
+    border: "none", borderRadius: "var(--radius-sm)",
+    fontSize: 13, fontWeight: 700, cursor: "pointer",
+    fontFamily: "Inter, sans-serif",
+  },
+  saveCopyBtnDone: { background: "var(--accent-green)" },
+
+  otpTitle: {
+    fontFamily: "Space Grotesk, sans-serif",
+    fontSize: 20, fontWeight: 700,
+    color: "var(--text-primary)",
+    marginBottom: 6,
+  },
+  otpHint: { fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 },
+  otpRow: { display: "flex", gap: 10, justifyContent: "center", margin: "8px 0" },
+  otpBox: {
+    width: 48, height: 56,
+    textAlign: "center",
+    fontSize: 24, fontWeight: 700,
+    fontFamily: "JetBrains Mono, monospace",
+    background: "var(--bg-secondary)",
+    border: "1.5px solid var(--border-bright)",
+    borderRadius: "var(--radius-sm)",
+    color: "var(--accent-cyan)",
+    outline: "none",
+    transition: "border-color 0.15s, box-shadow 0.15s",
+  },
+  otpActions: { display: "flex", justifyContent: "space-between", marginTop: 4 },
+  linkBtnPlain: {
+    background: "transparent", border: "none", color: "var(--accent-cyan)",
+    cursor: "pointer", fontSize: 13, fontWeight: 600,
+    padding: 6, fontFamily: "Inter, sans-serif",
+  },
+  devBanner: {
+    padding: "12px 14px",
+    background: "rgba(167,139,250,0.10)",
+    border: "1px solid rgba(167,139,250,0.30)",
+    borderRadius: "var(--radius-sm)",
+    fontSize: 13, color: "var(--text-primary)", lineHeight: 1.6,
+  },
+  devOtpCode: {
+    fontFamily: "JetBrains Mono, monospace",
+    fontSize: 18, color: "var(--accent-violet)",
+    letterSpacing: "0.15em",
+  },
+  codeChip: {
+    background: "var(--bg-card)",
+    padding: "1px 6px", borderRadius: 4,
+    fontFamily: "JetBrains Mono, monospace",
+    fontSize: 12, color: "var(--accent-cyan)",
   },
 };

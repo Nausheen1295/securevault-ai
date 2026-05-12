@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { encryptFile, decryptFile, passwordStrength, generatePassword } from "../utils/crypto";
 import { checkPwnedPassword } from "../utils/hibp";
+import { auth, saveFileRecord, logSecurityEvent } from "../utils/firebase";
 
 export default function FileEncryptor() {
   const [files, setFiles]       = useState([]);
@@ -69,6 +70,22 @@ export default function FileEncryptor() {
           downloadBlob(res.blob, res.name);
           produced.push({ svaultName: res.name, blob: res.blob, size: res.size });
           out.push({ name: f.name, svaultName: res.name, status: "✅ Encrypted", checksum: res.checksum.slice(0,16) + "…", size: formatBytes(res.size) });
+          // Persist metadata for the profile page (no blob, no key — just metadata)
+          if (auth?.currentUser) {
+            const uid = auth.currentUser.uid;
+            saveFileRecord(uid, {
+              originalName: f.name,
+              svaultName:   res.name,
+              size:         res.size,
+              checksum:     res.checksum,
+              mimeType:     f.type || "application/octet-stream",
+            }).catch(() => {});
+            logSecurityEvent(uid, {
+              type: "encrypt",
+              detail: `Encrypted ${f.name}`,
+              risk: "SAFE",
+            }).catch(() => {});
+          }
         } else {
           const res = await decryptFile(f, password);
           downloadBlob(res.blob, res.name);

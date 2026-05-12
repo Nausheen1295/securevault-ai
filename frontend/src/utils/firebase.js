@@ -7,6 +7,10 @@ import {
   onAuthStateChanged,
   sendEmailVerification,
   reload,
+  updateProfile as fbUpdateProfile,
+  deleteUser,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
 } from "firebase/auth";
 import { 
   getFirestore, 
@@ -77,8 +81,9 @@ export async function registerUser(email, password, name) {
     await new Promise(r => setTimeout(r, 400));
     return demoUser(email);
   }
+  // The OTP step in the UI gates this call, so by the time we get here the
+  // user has already proven control of the email. No Firebase email-link needed.
   const result = await createUserWithEmailAndPassword(auth, email, password);
-  // Save profile, then send the verification email
   await setDoc(doc(db, "users", result.user.uid), {
     name,
     email,
@@ -86,8 +91,8 @@ export async function registerUser(email, password, name) {
     securityScore: 100,
     filesEncrypted: 0,
     threatsBlocked: 0,
+    otpVerifiedAt: serverTimestamp(),
   });
-  await sendEmailVerification(result.user);
   return result.user;
 }
 
@@ -122,13 +127,35 @@ export function onAuthChange(callback) {
 // ── USER PROFILE ──
 
 export async function getUserProfile(uid) {
+  if (!isFirebaseConfigured || !uid) return null;
   const docRef  = doc(db, "users", uid);
   const docSnap = await getDoc(docRef);
   return docSnap.exists() ? docSnap.data() : null;
 }
 
 export async function updateUserProfile(uid, data) {
+  if (!isFirebaseConfigured || !uid) return;
   await setDoc(doc(db, "users", uid), data, { merge: true });
+}
+
+export async function updateDisplayName(name) {
+  if (!isFirebaseConfigured || !auth?.currentUser) return;
+  await fbUpdateProfile(auth.currentUser, { displayName: name });
+  await setDoc(doc(db, "users", auth.currentUser.uid), { name }, { merge: true });
+}
+
+export async function deleteAccountWithReauth(password) {
+  if (!isFirebaseConfigured || !auth?.currentUser) {
+    throw new Error("You're not signed in with a Firebase account.");
+  }
+  const user = auth.currentUser;
+  if (!user.email) throw new Error("Account has no email on file.");
+  // Re-authenticate. Firebase requires this for delete if the last sign-in was a while ago.
+  const credential = EmailAuthProvider.credential(user.email, password);
+  await reauthenticateWithCredential(user, credential);
+  // Try to delete the Firestore profile first — non-fatal if it fails
+  try { await deleteDoc(doc(db, "users", user.uid)); } catch { /* ignore */ }
+  await deleteUser(user);
 }
 
 // ── FILE RECORDS (Firestore metadata) ──
