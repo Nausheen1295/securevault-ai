@@ -6,6 +6,7 @@
     "@anthropic-ai/sdk": "^0.95.2",
     "@emailjs/browser": "^4.4.1",
     "@google/generative-ai": "^0.24.1",
+    "ethers": "^6.16.0",
     "firebase": "^12.13.0",
     "qrcode": "^1.5.4",
     "react": "^18.2.0",
