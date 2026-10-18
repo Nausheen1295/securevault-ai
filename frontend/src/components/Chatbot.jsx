@@ -247,7 +247,7 @@ export default function Chatbot() {
           </div>
 
           <div style={styles.footer}>
-            Powered by Claude · responses can be imperfect; verify in the app.
+            AI assistant · responses can be imperfect; verify in the app.
           </div>
         </div>
       )}
